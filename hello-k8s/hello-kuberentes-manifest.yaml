@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: hello-kubernetes
-          image: docker.io/volterrademos/hello-kubernetes:v1
+          image: docker.io/volterrademos/hello-kubernetes:latest
           ports:
             - containerPort: 8080
               protocol: TCP

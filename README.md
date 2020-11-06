@@ -9,4 +9,4 @@ Group Volterra public demo & apps
 **Online Boutique (was Hipster Shop) - samples/hipster-shop**
 - Source: https://github.com/GoogleCloudPlatform/microservices-demo
 
-**/patio - a social gathering of various customer demos & use-cases**
+**/patio - a social gathering of various demos, use-cases, examples and useful scripts. 

@@ -559,10 +559,10 @@ spec:
       restartPolicy: Always
       containers:
       - name: main
-        image: gcr.io/google-samples/microservices-demo/loadgenerator:v0.2.0
+        image: gcr.io/solutions-team-280017/load-generator:https
         env:
         - name: FRONTEND_ADDR
-          value: "frontend:80"
+          value: "http://frontend:80"
         - name: USERS
           value: "10"
         resources:

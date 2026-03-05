@@ -1,0 +1,136 @@
+name: EKS Cluster - Deploy
+
+on:
+  workflow_dispatch:
+
+env:
+  TF_WORKSPACE: eks-cluster
+  TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+jobs:
+  # ------------------------------------------------------------------
+  # Job 1: Crear el workspace en Terraform Cloud si no existe
+  # ------------------------------------------------------------------
+  setup-workspace:
+    name: Setup Terraform Cloud Workspace
+    runs-on: ubuntu-latest
+    steps:
+      - name: Crear workspace en Terraform Cloud (si no existe)
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${{ secrets.TFC_TOKEN }}" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${{ secrets.TFC_ORG }}/workspaces/${TF_WORKSPACE}")
+
+          if [ "$HTTP_STATUS" -eq 404 ]; then
+            echo "Workspace no encontrado, creando..."
+            curl -s \
+              --header "Authorization: Bearer ${{ secrets.TFC_TOKEN }}" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request POST \
+              --data '{
+                "data": {
+                  "type": "workspaces",
+                  "attributes": {
+                    "name": "'"${TF_WORKSPACE}"'",
+                    "execution-mode": "local",
+                    "auto-apply": false,
+                    "description": "Workspace para cluster EKS administrado por GitHub Actions"
+                  }
+                }
+              }' \
+              "https://app.terraform.io/api/v2/organizations/${{ secrets.TFC_ORG }}/workspaces"
+            echo "Workspace '${TF_WORKSPACE}' creado exitosamente."
+          else
+            echo "Workspace '${TF_WORKSPACE}' ya existe (HTTP $HTTP_STATUS), continuando..."
+          fi
+
+  # ------------------------------------------------------------------
+  # Job 2: Terraform Format, Init, Validate y Plan
+  # ------------------------------------------------------------------
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: setup-workspace
+    defaults:
+      run:
+        working-directory: eks
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform con Terraform Cloud
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TFC_TOKEN }}
+
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -out=tfplan
+        env:
+          TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+
+      - name: Subir plan como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: eks/tfplan
+          retention-days: 1
+
+  # ------------------------------------------------------------------
+  # Job 3: Terraform Apply (consume el plan generado en el job anterior)
+  # ------------------------------------------------------------------
+  apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: plan
+    defaults:
+      run:
+        working-directory: eks
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform con Terraform Cloud
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TFC_TOKEN }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Descargar plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: eks/
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan

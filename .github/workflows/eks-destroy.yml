@@ -48,10 +48,13 @@ jobs:
       - name: Terraform Init
         id: init
         run: terraform init
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
 
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
         env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
           TF_VAR_aws_region: ${{ vars.AWS_REGION }}
 
       - name: Eliminar workspace de Terraform Cloud

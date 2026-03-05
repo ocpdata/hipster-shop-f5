@@ -79,6 +79,8 @@ jobs:
       - name: Terraform Init
         id: init
         run: terraform init
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
 
       - name: Terraform Validate
         id: validate
@@ -88,6 +90,7 @@ jobs:
         id: plan
         run: terraform plan -out=tfplan
         env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
           TF_VAR_aws_region: ${{ vars.AWS_REGION }}
 
       - name: Subir plan como artifact
@@ -125,6 +128,8 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
 
       - name: Descargar plan artifact
         uses: actions/download-artifact@v4
@@ -134,3 +139,5 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}

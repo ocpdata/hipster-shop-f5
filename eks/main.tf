@@ -8,11 +8,9 @@ terraform {
     }
   }
 
-  # La organización y workspace son sobreescritos en runtime por las
+  # La organización y workspace se configuran en runtime mediante las
   # variables de entorno TF_CLOUD_ORGANIZATION y TF_WORKSPACE
   cloud {
-    organization = "placeholder"
-
     workspaces {
       name = "eks-cluster"
     }

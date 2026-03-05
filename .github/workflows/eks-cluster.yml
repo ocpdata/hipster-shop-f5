@@ -141,3 +141,65 @@ jobs:
         run: terraform apply -auto-approve tfplan
         env:
           TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+  # ------------------------------------------------------------------
+  # Job 4: Desplegar hipster-shop en el cluster EKS
+  # ------------------------------------------------------------------
+  deploy-hipster-shop:
+    name: Deploy Hipster Shop
+    runs-on: ubuntu-latest
+    needs: apply
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform con Terraform Cloud
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TFC_TOKEN }}
+
+      - name: Terraform Init
+        working-directory: eks
+        run: terraform init
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+      - name: Obtener nombre del cluster EKS
+        id: cluster
+        working-directory: eks
+        run: |
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+      - name: Configurar kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ vars.AWS_REGION }} \
+            --name ${{ steps.cluster.outputs.name }}
+
+      - name: Desplegar hipster-shop
+        run: |
+          kubectl apply -f hipster-shop/kubernetes-manifests.yaml
+
+      - name: Verificar rollout de los deployments
+        run: |
+          kubectl rollout status deployment/emailservice --timeout=120s
+          kubectl rollout status deployment/checkoutservice --timeout=120s
+          kubectl rollout status deployment/recommendationservice --timeout=120s
+          kubectl rollout status deployment/frontend --timeout=120s
+          kubectl rollout status deployment/paymentservice --timeout=120s
+          kubectl rollout status deployment/productcatalogservice --timeout=120s
+          kubectl rollout status deployment/cartservice --timeout=120s
+          kubectl rollout status deployment/loadgenerator --timeout=120s
+          kubectl rollout status deployment/currencyservice --timeout=120s
+          kubectl rollout status deployment/shippingservice --timeout=120s
+          kubectl rollout status deployment/adservice --timeout=120s

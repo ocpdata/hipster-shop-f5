@@ -12,7 +12,7 @@ on:
 #   AWS_SECRET_ACCESS_KEY     → IAM Secret Key
 #   XC_API_P12_FILE           → cat api-creds.p12 | base64 -w0
 #   XC_API_URL                → https://<tenant>.console.ves.volterra.io/api
-#   XC_P12_PASSWORD           → echo -n "<password>" | base64
+#   XC_P12_PASSWORD           → contraseña del .p12 en texto plano
 #   XC_TENANT                 → nombre del tenant (ej: my-company)
 #   TFC_TOKEN                 → token de API de Terraform Cloud
 #   TFC_ORG                   → nombre de la organización en Terraform Cloud
@@ -37,9 +37,9 @@ jobs:
     environment: production   # requiere aprobación manual si está configurado
 
     env:
-      VOLT_API_P12_FILE: /tmp/api-creds.p12
+      VOLT_API_P12_FILE: ./api.p12
       VOLT_API_URL: ${{ secrets.XC_API_URL }}
-      # VES_P12_PASSWORD se inyecta en GITHUB_ENV tras decodificar XC_P12_PASSWORD
+      VES_P12_PASSWORD: ${{ secrets.XC_P12_PASSWORD }}
       TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
 
     defaults:
@@ -64,19 +64,11 @@ jobs:
       - name: Write F5 XC API credentials
         env:
           XC_API_P12_FILE: ${{ secrets.XC_API_P12_FILE }}
-          XC_P12_PASSWORD: ${{ secrets.XC_P12_PASSWORD }}
         run: |
-          # tr -d elimina saltos de línea y espacios que base64 puede tener
-          # al ser copiado/almacenado en GitHub Secrets
-          printf '%s' "${XC_API_P12_FILE}" | tr -d '\n\r ' | base64 -d > /tmp/api-creds.p12
-          chmod 600 /tmp/api-creds.p12
-          # Capturar la contraseña decodificada y escribirla en GITHUB_ENV
-          P12_PASS=$(printf '%s' "${XC_P12_PASSWORD}" | tr -d '\n\r ' | base64 -d)
-          {
-            echo "VES_P12_PASSWORD<<__P12_EOF__"
-            echo "${P12_PASS}"
-            echo "__P12_EOF__"
-          } >> "$GITHUB_ENV"
+          # XC_API_P12_FILE contiene el .p12 en base64
+          # XC_P12_PASSWORD se pasa directamente como VES_P12_PASSWORD (texto plano)
+          printf '%s' "${XC_API_P12_FILE}" | tr -d '\n\r ' | base64 -d > api.p12
+          chmod 600 api.p12
 
       - name: Terraform Init
         run: terraform init -input=false
@@ -110,5 +102,5 @@ jobs:
       - name: Cleanup credentials
         if: always()
         run: |
-          rm -f /tmp/api-creds.p12
+          rm -f api.p12
           rm -f ci.auto.tfvars

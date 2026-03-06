@@ -9,6 +9,7 @@ tfplan
 
 # F5 XC credentials
 *.p12
+f5xc/api.p12
 *.pem
 *.key
 

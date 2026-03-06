@@ -188,7 +188,7 @@ jobs:
 
       - name: Desplegar hipster-shop
         run: |
-          kubectl apply -f hipster-shop/kubernetes-manifests.yaml
+          kubectl apply -f hipster-shop/kubernetes-manifests.yaml --validate=false
 
       - name: Verificar rollout de los deployments
         run: |

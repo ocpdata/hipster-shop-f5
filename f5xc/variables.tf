@@ -1,4 +1,16 @@
 # ─── F5 XC ────────────────────────────────────────────────────────────────────
+variable "xc_api_p12_file" {
+  description = "Ruta al archivo .p12 de la API credential de F5 XC (ej: ./api.p12)"
+  type        = string
+  default     = "./api.p12"
+}
+
+variable "xc_api_url" {
+  description = "URL de la API de F5 XC (ej: https://my-company.console.ves.volterra.io/api)"
+  type        = string
+  sensitive   = true
+}
+
 variable "f5xc_tenant" {
   description = "Nombre del tenant en F5 Distributed Cloud (ej: my-company)"
   type        = string

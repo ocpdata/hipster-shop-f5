@@ -16,10 +16,8 @@ terraform {
 }
 
 provider "volterra" {
-  # Configuración inyectada vía variables de entorno en CI/CD:
-  #   VOLT_API_P12_FILE  → ruta al .p12 exportado de F5 XC Console
-  #   VOLT_API_URL       → https://<tenant>.console.ves.volterra.io/api  (secret XC_API_URL)
-  #   VES_P12_PASSWORD   → contraseña del .p12 decodificada de base64    (secret XC_P12_PASSWORD)
-  #
-  # Para ejecución local, exporta esas variables antes de correr terraform.
+  # Ruta al .p12 y URL pasadas explicitamente via variables de Terraform
+  # La contraseña del .p12 se lee desde la env var VES_P12_PASSWORD
+  api_p12_file = var.xc_api_p12_file
+  url          = var.xc_api_url
 }

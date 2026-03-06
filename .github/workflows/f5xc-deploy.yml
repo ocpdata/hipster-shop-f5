@@ -12,7 +12,7 @@ on:
 #   XC_TENANT                 → nombre del tenant (ej: my-company)
 #   TFC_TOKEN                 → token de API de Terraform Cloud
 #   TFC_ORG                   → nombre de la organización en Terraform Cloud
-#   AWS_SSH_PUBLIC_KEY        → clave pública SSH para acceso a los nodos CE
+#   AWS_SSH_PUBLIC_KEY        → SSH_PRIVATE_KEY (clave privada; la pública se deriva en el workflow)
 #
 # ─── Variables de repositorio requeridas ──────────────────────────────────────
 #   AWS_REGION           → ej: us-east-1
@@ -94,6 +94,16 @@ jobs:
             echo "Workspace '${{ vars.TFC_WORKSPACE }}' ya existe (HTTP $STATUS)."
           fi
 
+      - name: Derive SSH public key from private key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          echo "${SSH_PRIVATE_KEY}" > /tmp/id_ssh
+          chmod 600 /tmp/id_ssh
+          SSH_PUBLIC_KEY=$(ssh-keygen -y -f /tmp/id_ssh)
+          rm -f /tmp/id_ssh
+          echo "SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY}" >> $GITHUB_ENV
+
       - name: Terraform Init
         run: terraform init -input=false
 
@@ -113,7 +123,7 @@ jobs:
           az_names             = ["${{ vars.AWS_REGION }}a", "${{ vars.AWS_REGION }}b"]
           certified_hw         = "${{ vars.AWS_XC_HW_PROFILE }}"
           instance_type        = "${{ vars.AWS_INSTANCE_TYPE }}"
-          ssh_key              = "${{ secrets.AWS_SSH_PUBLIC_KEY }}"
+          ssh_key              = "${{ env.SSH_PUBLIC_KEY }}"
           EOF
 
       - name: Terraform Plan

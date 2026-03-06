@@ -203,4 +203,4 @@ jobs:
           kubectl rollout status deployment/loadgenerator --timeout=180s
           kubectl rollout status deployment/currencyservice --timeout=180s
           kubectl rollout status deployment/shippingservice --timeout=180s
-          kubectl rollout status deployment/adservice --timeout=180s
+          kubectl rollout status deployment/redis-cart --timeout=180s

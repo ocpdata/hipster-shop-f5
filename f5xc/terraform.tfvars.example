@@ -1,0 +1,51 @@
+# Copia este archivo como terraform.tfvars y rellena los valores reales.
+# NUNCA subas terraform.tfvars al repositorio (está en .gitignore).
+
+# ─── F5 XC ────────────────────────────────────────────────────────────────────
+# El provider se configura mediante variables de entorno (no se pasan aquí):
+#   export VOLT_API_P12_FILE=/tmp/api-creds.p12
+#   export VOLT_API_URL=https://my-company.console.ves.volterra.io/api
+#   export VES_P12_PASSWORD=<contraseña del .p12>
+#
+# En CI, los secrets se mapean así:
+#   XC_API_P12_FILE  (base64) → VOLT_API_P12_FILE
+#   XC_API_URL                → VOLT_API_URL
+#   XC_P12_PASSWORD  (base64) → VES_P12_PASSWORD
+#
+# ─── Terraform Cloud ──────────────────────────────────────────────────────────
+tfc_organization = "my-org"         # secret: TFC_ORG
+tfc_workspace    = "f5xc-aws-site"  # var: TFC_WORKSPACE
+
+f5xc_tenant = "my-company"   # secret: XC_TENANT (necesario para outputs y aws_cred)
+
+# ─── Site ─────────────────────────────────────────────────────────────────────
+site_name        = "aws-vpc-site-demo"
+site_description = "Site de AWS creado con Terraform + F5 XC"
+
+# ─── AWS ──────────────────────────────────────────────────────────────────────
+aws_region           = "us-east-1"   # var: AWS_REGION
+aws_access_key       = "AKIAIOSFODNN7EXAMPLE"
+aws_secret_key       = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+aws_credentials_name = "aws-site-credentials"
+
+# ─── VPC / Networking ─────────────────────────────────────────────────────────
+vpc_cidr = "192.168.0.0/16"   # var: AWS_VPC_CIDR
+
+# Las subnets se generan automáticamente con cidrsubnet (2 AZs, multi-NIC, 3 subnets/AZ):
+#   AZ us-east-1a → outside: 192.168.1.0/24 │ inside: 192.168.2.0/24 │ workload: 192.168.3.0/24
+#   AZ us-east-1b → outside: 192.168.4.0/24 │ inside: 192.168.5.0/24 │ workload: 192.168.6.0/24
+az_names = ["us-east-1a", "us-east-1b"]
+
+# ─── Node type ────────────────────────────────────────────────────────────────
+# Hardware certificado del CE (var: AWS_XC_HW_PROFILE)
+# Opciones:
+#   aws-byol-single-nic-voltmesh   → single-NIC, Ingress GW (más simple)
+#   aws-byol-multi-nic-voltmesh    → multi-NIC, Ingress/Egress GW
+#   aws-byol-voltstack-combo       → Voltstack (apps + networking)
+certified_hw  = "aws-byol-multi-nic-voltmesh"              # var: AWS_XC_HW_PROFILE
+
+# ─── Labels ───────────────────────────────────────────────────────────────────
+labels = {
+  env  = "demo"
+  team = "platform"
+}

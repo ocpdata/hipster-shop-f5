@@ -1,0 +1,16 @@
+# Terraform state & sensitive files
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+tfplan
+
+# F5 XC credentials
+*.p12
+*.pem
+*.key
+
+# CI auto-generated vars
+ci.auto.tfvars

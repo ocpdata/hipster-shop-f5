@@ -1,0 +1,105 @@
+name: F5 XC – Destroy AWS VPC Site
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Escribe DESTROY para confirmar la eliminación del site"
+        required: true
+
+# ─── Secrets requeridos ───────────────────────────────────────────────────────
+#   AWS_ACCESS_KEY_ID         → IAM Access Key
+#   AWS_SECRET_ACCESS_KEY     → IAM Secret Key
+#   XC_API_P12_FILE           → cat api-creds.p12 | base64 -w0
+#   XC_API_URL                → https://<tenant>.console.ves.volterra.io/api
+#   XC_P12_PASSWORD           → echo -n "<password>" | base64
+#   XC_TENANT                 → nombre del tenant (ej: my-company)
+#   TFC_TOKEN                 → token de API de Terraform Cloud
+#   TFC_ORG                   → nombre de la organización en Terraform Cloud
+#
+# ─── Variables de repositorio requeridas ──────────────────────────────────────
+#   AWS_REGION           → ej: us-east-1
+#   SITE_NAME_AWS        → ej: aws-vpc-site-demo
+#   AWS_VPC_CIDR         → 192.168.0.0/16
+#   AWS_XC_HW_PROFILE    → perfil de red del CE (ej: aws-byol-multi-nic-voltmesh)
+#   TFC_WORKSPACE        → nombre del workspace (ej: f5xc-aws-site)
+
+permissions:
+  contents: read
+
+env:
+  TF_WORKING_DIR: ./f5xc
+
+jobs:
+  terraform-destroy:
+    name: "Destroy · F5 XC AWS VPC Site"
+    runs-on: ubuntu-latest
+    environment: production   # requiere aprobación manual si está configurado
+
+    env:
+      VOLT_API_P12_FILE: /tmp/api-creds.p12
+      VOLT_API_URL: ${{ secrets.XC_API_URL }}
+      # VES_P12_PASSWORD se inyecta en GITHUB_ENV tras decodificar XC_P12_PASSWORD
+      TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+
+    defaults:
+      run:
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+    steps:
+      - name: Verify confirmation input
+        if: ${{ github.event.inputs.confirm != 'DESTROY' }}
+        run: |
+          echo "❌ Confirmación incorrecta. Escribe exactamente 'DESTROY' para continuar."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+
+      - name: Write F5 XC API credentials
+        run: |
+          # Decodificar el .p12 desde base64
+          echo "${{ secrets.XC_API_P12_FILE }}" | base64 -d > /tmp/api-creds.p12
+          chmod 600 /tmp/api-creds.p12
+          # Decodificar la contraseña del .p12 e inyectarla como variable de entorno
+          echo "VES_P12_PASSWORD=$(echo '${{ secrets.XC_P12_PASSWORD }}' | base64 -d)" >> "$GITHUB_ENV"
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Generate tfvars
+        run: |
+          cat <<EOF > ci.auto.tfvars
+          f5xc_tenant          = "${{ secrets.XC_TENANT }}"
+          site_name            = "${{ vars.SITE_NAME_AWS }}"
+          aws_region           = "${{ vars.AWS_REGION }}"
+          aws_access_key       = "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws_secret_key       = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          aws_credentials_name = "${{ vars.SITE_NAME_AWS }}-creds"
+          vpc_cidr             = "${{ vars.AWS_VPC_CIDR }}"
+          az_names             = ["${{ vars.AWS_REGION }}a", "${{ vars.AWS_REGION }}b"]
+          certified_hw         = "${{ vars.AWS_XC_HW_PROFILE }}"
+          tfc_organization     = "${{ secrets.TFC_ORG }}"
+          tfc_workspace        = "${{ vars.TFC_WORKSPACE }}"
+          EOF
+
+      - name: Terraform Plan (destroy)
+        run: |
+          terraform plan -input=false -destroy -out=tfplan-destroy
+
+      - name: Terraform Destroy
+        run: terraform apply -input=false -auto-approve tfplan-destroy
+
+      - name: Cleanup credentials
+        if: always()
+        run: |
+          rm -f /tmp/api-creds.p12
+          rm -f ci.auto.tfvars

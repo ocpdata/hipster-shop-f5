@@ -1,15 +1,3 @@
-# ─── Terraform Cloud ──────────────────────────────────────────────────────────
-variable "tfc_organization" {
-  description = "Nombre de la organización en Terraform Cloud"
-  type        = string
-}
-
-variable "tfc_workspace" {
-  description = "Nombre del workspace en Terraform Cloud"
-  type        = string
-  default     = "f5xc-aws-site"
-}
-
 # ─── F5 XC ────────────────────────────────────────────────────────────────────
 variable "f5xc_tenant" {
   description = "Nombre del tenant en F5 Distributed Cloud (ej: my-company)"

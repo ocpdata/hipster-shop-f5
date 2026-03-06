@@ -41,6 +41,8 @@ jobs:
       VOLT_API_URL: ${{ secrets.XC_API_URL }}
       VES_P12_PASSWORD: ${{ secrets.XC_P12_PASSWORD }}
       TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+      TF_WORKSPACE: ${{ vars.TFC_WORKSPACE }}
 
     defaults:
       run:
@@ -88,8 +90,6 @@ jobs:
           vpc_cidr             = "${{ vars.AWS_VPC_CIDR }}"
           az_names             = ["${{ vars.AWS_REGION }}a", "${{ vars.AWS_REGION }}b"]
           certified_hw         = "${{ vars.AWS_XC_HW_PROFILE }}"
-          tfc_organization     = "${{ secrets.TFC_ORG }}"
-          tfc_workspace        = "${{ vars.TFC_WORKSPACE }}"
           EOF
 
       - name: Terraform Plan (destroy)

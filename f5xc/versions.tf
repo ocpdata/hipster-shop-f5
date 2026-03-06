@@ -2,16 +2,10 @@ terraform {
   required_version = ">= 1.3.0"
 
   # ─── Terraform Cloud backend ───────────────────────────────────────────────
-  # El state se almacena en Terraform Cloud.
-  # Variables de repo requeridas: TF_CLOUD_ORGANIZATION, TF_WORKSPACE
-  # Secret requerido:             TF_TOKEN_app_terraform_io
-  cloud {
-    organization = var.tfc_organization
-
-    workspaces {
-      name = var.tfc_workspace
-    }
-  }
+  # Organización y workspace se configuran mediante env vars:
+  #   TF_CLOUD_ORGANIZATION → secret TFC_ORG
+  #   TF_WORKSPACE          → var    TFC_WORKSPACE
+  cloud {}
 
   required_providers {
     volterra = {

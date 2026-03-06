@@ -13,8 +13,14 @@
 #   XC_P12_PASSWORD  (base64) → VES_P12_PASSWORD
 #
 # ─── Terraform Cloud ──────────────────────────────────────────────────────────
-tfc_organization = "my-org"         # secret: TFC_ORG
-tfc_workspace    = "f5xc-aws-site"  # var: TFC_WORKSPACE
+# Configurado mediante variables de entorno en CI (no se pasan como tfvars):
+#   TF_CLOUD_ORGANIZATION → secret TFC_ORG
+#   TF_WORKSPACE          → var    TFC_WORKSPACE
+#
+# Para ejecución local, exporta antes de correr terraform:
+#   export TF_CLOUD_ORGANIZATION=my-org
+#   export TF_WORKSPACE=f5xc-aws-site
+#   export TF_TOKEN_app_terraform_io=<token>
 
 f5xc_tenant = "my-company"   # secret: XC_TENANT (necesario para outputs y aws_cred)
 

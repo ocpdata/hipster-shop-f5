@@ -66,12 +66,12 @@ jobs:
           XC_API_P12_FILE: ${{ secrets.XC_API_P12_FILE }}
           XC_P12_PASSWORD: ${{ secrets.XC_P12_PASSWORD }}
         run: |
-          # Pasar los secrets como env vars del step evita problemas de
-          # expansión inline con caracteres especiales o saltos de línea
-          printf '%s' "${XC_API_P12_FILE}" | base64 -d > /tmp/api-creds.p12
+          # tr -d elimina saltos de línea y espacios que base64 puede tener
+          # al ser copiado/almacenado en GitHub Secrets
+          printf '%s' "${XC_API_P12_FILE}" | tr -d '\n\r ' | base64 -d > /tmp/api-creds.p12
           chmod 600 /tmp/api-creds.p12
           # Capturar la contraseña decodificada y escribirla en GITHUB_ENV
-          P12_PASS=$(printf '%s' "${XC_P12_PASSWORD}" | base64 -d)
+          P12_PASS=$(printf '%s' "${XC_P12_PASSWORD}" | tr -d '\n\r ' | base64 -d)
           {
             echo "VES_P12_PASSWORD<<__P12_EOF__"
             echo "${P12_PASS}"

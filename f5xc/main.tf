@@ -8,7 +8,9 @@ resource "volterra_cloud_credentials" "aws" {
   aws_secret_key {
     access_key = var.aws_access_key
     secret_key {
-      clear_secret_text = var.aws_secret_key
+      clear_secret_info {
+        url = "string:///${base64encode(var.aws_secret_key)}"
+      }
     }
   }
 }

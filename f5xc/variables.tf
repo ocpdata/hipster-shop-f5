@@ -63,6 +63,19 @@ variable "az_names" {
 # subnet_cidr eliminado: cada AZ recibe su propio /24 automáticamente
 # usando cidrsubnet(vpc_cidr, 8, index + 1) en main.tf
 
+# ─── Instance / Access ───────────────────────────────────────────────────────
+variable "instance_type" {
+  description = "Tipo de instancia EC2 para el nodo CE (ej: t3.xlarge)"
+  type        = string
+  default     = "t3.xlarge"
+}
+
+variable "ssh_key" {
+  description = "Clave pública SSH para acceso a los nodos (contenido completo, ej: ssh-rsa AAAA...)"
+  type        = string
+  sensitive   = true
+}
+
 # ─── Node type ────────────────────────────────────────────────────────────────
 variable "certified_hw" {
   description = "Hardware certificado F5 XC para el nodo CE en AWS (var: AWS_XC_HW_PROFILE)"

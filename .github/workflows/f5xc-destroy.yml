@@ -16,12 +16,14 @@ on:
 #   XC_TENANT                 → nombre del tenant (ej: my-company)
 #   TFC_TOKEN                 → token de API de Terraform Cloud
 #   TFC_ORG                   → nombre de la organización en Terraform Cloud
+#   AWS_SSH_PUBLIC_KEY        → clave pública SSH para acceso a los nodos CE
 #
 # ─── Variables de repositorio requeridas ──────────────────────────────────────
 #   AWS_REGION           → ej: us-east-1
 #   SITE_NAME_AWS        → ej: aws-vpc-site-demo
 #   AWS_VPC_CIDR         → 192.168.0.0/16
 #   AWS_XC_HW_PROFILE    → perfil de red del CE (ej: aws-byol-multi-nic-voltmesh)
+#   AWS_INSTANCE_TYPE    → tipo de instancia EC2 (ej: t3.xlarge)
 #   TFC_WORKSPACE        → nombre del workspace (ej: f5xc-aws-site)
 
 permissions:
@@ -118,6 +120,8 @@ jobs:
           vpc_cidr             = "${{ vars.AWS_VPC_CIDR }}"
           az_names             = ["${{ vars.AWS_REGION }}a", "${{ vars.AWS_REGION }}b"]
           certified_hw         = "${{ vars.AWS_XC_HW_PROFILE }}"
+          instance_type        = "${{ vars.AWS_INSTANCE_TYPE }}"
+          ssh_key              = "${{ secrets.AWS_SSH_PUBLIC_KEY }}"
           EOF
 
       - name: Terraform Plan (destroy)

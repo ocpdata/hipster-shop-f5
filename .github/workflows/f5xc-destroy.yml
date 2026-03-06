@@ -104,6 +104,7 @@ jobs:
           fi
 
       - name: Terraform Init
+        run: terraform init -input=false
 
       - name: Generate tfvars
         run: |

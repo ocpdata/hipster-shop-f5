@@ -61,6 +61,37 @@ jobs:
           printf '%s' "${XC_API_P12_FILE}" | tr -d '\n\r ' | base64 -d > api.p12
           chmod 600 api.p12
 
+      - name: Create TFC workspace if not exists
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG: ${{ secrets.TFC_ORG }}
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${{ vars.TFC_WORKSPACE }}")
+
+          if [ "$STATUS" = "404" ]; then
+            echo "Workspace '${{ vars.TFC_WORKSPACE }}' no existe, creando..."
+            curl -s --fail \
+              --header "Authorization: Bearer ${TFC_TOKEN}" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request POST \
+              --data '{
+                "data": {
+                  "type": "workspaces",
+                  "attributes": {
+                    "name": "${{ vars.TFC_WORKSPACE }}",
+                    "execution-mode": "local"
+                  }
+                }
+              }' \
+              "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces"
+            echo "Workspace creado."
+          else
+            echo "Workspace '${{ vars.TFC_WORKSPACE }}' ya existe (HTTP $STATUS)."
+          fi
+
       - name: Terraform Init
         run: terraform init -input=false
 

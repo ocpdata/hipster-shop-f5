@@ -64,10 +64,16 @@ jobs:
       - name: Write F5 XC API credentials
         run: |
           # Decodificar el .p12 desde base64
-          echo "${{ secrets.XC_API_P12_FILE }}" | base64 -d > /tmp/api-creds.p12
+          printf '%s' "${{ secrets.XC_API_P12_FILE }}" | base64 -d > /tmp/api-creds.p12
           chmod 600 /tmp/api-creds.p12
-          # Decodificar la contraseña del .p12 e inyectarla como variable de entorno
-          echo "VES_P12_PASSWORD=$(echo '${{ secrets.XC_P12_PASSWORD }}' | base64 -d)" >> "$GITHUB_ENV"
+          # Decodificar la contraseña e inyectarla usando el formato multiline de GITHUB_ENV
+          # para evitar problemas con caracteres especiales
+          {
+            echo "VES_P12_PASSWORD<<__P12_EOF__"
+            printf '%s' "${{ secrets.XC_P12_PASSWORD }}" | base64 -d
+            echo ""
+            echo "__P12_EOF__"
+          } >> "$GITHUB_ENV"
 
       - name: Terraform Init
         run: terraform init -input=false

@@ -8,9 +8,80 @@ env:
   TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
 
 jobs:
+  # ------------------------------------------------------------------
+  # Job 1: Eliminar hipster-shop del cluster antes de destruir la infra
+  # ------------------------------------------------------------------
+  delete-hipster-shop:
+    name: Delete Hipster Shop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Verificar que el workspace existe en Terraform Cloud
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${{ secrets.TFC_TOKEN }}" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${{ secrets.TFC_ORG }}/workspaces/${TF_WORKSPACE}")
+
+          if [ "$HTTP_STATUS" -eq 404 ]; then
+            echo "El workspace '${TF_WORKSPACE}' no existe. No hay nada que destruir."
+            exit 1
+          else
+            echo "Workspace '${TF_WORKSPACE}' encontrado (HTTP $HTTP_STATUS), procediendo..."
+          fi
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform con Terraform Cloud
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TFC_TOKEN }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: eks
+        run: terraform init
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+      - name: Obtener nombre del cluster EKS
+        id: cluster
+        working-directory: eks
+        run: |
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+      - name: Configurar kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ vars.AWS_REGION }} \
+            --name ${{ steps.cluster.outputs.name }}
+
+      - name: Eliminar hipster-shop del cluster
+        run: |
+          kubectl delete -f hipster-shop/kubernetes-manifests.yaml --ignore-not-found=true
+
+      - name: Esperar que los LoadBalancers sean eliminados
+        run: |
+          echo "Esperando eliminación de servicios tipo LoadBalancer..."
+          kubectl wait --for=delete service/frontend --timeout=120s || true
+
+  # ------------------------------------------------------------------
+  # Job 2: Destruir la infraestructura EKS con Terraform
+  # ------------------------------------------------------------------
   terraform-destroy:
     name: Destroy EKS Cluster
     runs-on: ubuntu-latest
+    needs: delete-hipster-shop
     defaults:
       run:
         working-directory: eks

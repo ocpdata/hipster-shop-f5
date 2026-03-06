@@ -186,7 +186,7 @@ spec:
       terminationGracePeriodSeconds: 5
       containers:
       - name: server
-        image: gcr.io/solutions-team-280017/cartservice:latest
+        image: gcr.io/google-samples/microservices-demo/cartservice:v0.1.2
         ports:
         - containerPort: 7070
         env:
@@ -505,7 +505,7 @@ spec:
     spec:
       containers:
       - name: master
-        image: k8s.gcr.io/redis:e2e  # or just image: redis
+        image: redis:alpine
         resources:
           requests:
             cpu: 100m
@@ -559,7 +559,7 @@ spec:
       restartPolicy: Always
       containers:
       - name: main
-        image: gcr.io/solutions-team-280017/load-generator:https
+        image: gcr.io/google-samples/microservices-demo/loadgenerator:v0.1.2
         env:
         - name: FRONTEND_ADDR
           value: "http://frontend:80"

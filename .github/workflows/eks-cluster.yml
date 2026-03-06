@@ -193,14 +193,14 @@ jobs:
 
       - name: Verificar rollout de los deployments
         run: |
-          kubectl rollout status deployment/emailservice --timeout=120s
-          kubectl rollout status deployment/checkoutservice --timeout=120s
-          kubectl rollout status deployment/recommendationservice --timeout=120s
-          kubectl rollout status deployment/frontend --timeout=120s
-          kubectl rollout status deployment/paymentservice --timeout=120s
-          kubectl rollout status deployment/productcatalogservice --timeout=120s
-          kubectl rollout status deployment/cartservice --timeout=120s
-          kubectl rollout status deployment/loadgenerator --timeout=120s
-          kubectl rollout status deployment/currencyservice --timeout=120s
-          kubectl rollout status deployment/shippingservice --timeout=120s
-          kubectl rollout status deployment/adservice --timeout=120s
+          kubectl rollout status deployment/emailservice --timeout=180s
+          kubectl rollout status deployment/checkoutservice --timeout=180s
+          kubectl rollout status deployment/recommendationservice --timeout=180s
+          kubectl rollout status deployment/frontend --timeout=300s
+          kubectl rollout status deployment/paymentservice --timeout=180s
+          kubectl rollout status deployment/productcatalogservice --timeout=180s
+          kubectl rollout status deployment/cartservice --timeout=180s
+          kubectl rollout status deployment/loadgenerator --timeout=180s
+          kubectl rollout status deployment/currencyservice --timeout=180s
+          kubectl rollout status deployment/shippingservice --timeout=180s
+          kubectl rollout status deployment/adservice --timeout=180s

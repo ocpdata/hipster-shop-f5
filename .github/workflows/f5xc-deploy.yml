@@ -157,6 +157,33 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -input=false -auto-approve tfplan
 
+      - name: Diagnose site validation status
+        if: always()
+        env:
+          XC_API_URL: ${{ secrets.XC_API_URL }}
+        run: |
+          TENANT_HOST=$(echo "${XC_API_URL}" | sed 's|/api$||' | sed 's|https://||')
+          SITE_NAME="${{ vars.SITE_NAME_AWS }}"
+          echo "=== Querying F5 XC site status for: ${SITE_NAME} ==="
+          curl -s \
+            --cert-type P12 --cert api.p12:${VES_P12_PASSWORD} \
+            "https://${TENANT_HOST}/api/config/namespaces/system/aws_vpc_sites/${SITE_NAME}" \
+            | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    status_list = d.get('status', [])
+    print('--- object_status ---')
+    for s in status_list:
+        cond = s.get('status', {}).get('conditions', [])
+        for c in cond:
+            print(f'  type={c.get(\"type\")} status={c.get(\"status\")} reason={c.get(\"reason\")} msg={c.get(\"message\")}')
+except Exception as e:
+    print(f'parse error: {e}')
+    sys.stdin.seek(0)
+    print(sys.stdin.read())
+" 2>/dev/null || echo "curl/parse failed"
+
       - name: Terraform Output
         run: terraform output
 

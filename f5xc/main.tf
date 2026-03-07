@@ -41,31 +41,7 @@ resource "volterra_aws_vpc_site" "site" {
     }
   }
 
-  # Egress via Internet Gateway
-  egress_gateway_default = true
-
-  # Sin VIPs públicas (puede habilitarse después)
-  disable_internet_vip = true
-
-  # Security group gestionado por F5 XC
-  f5xc_security_group = true
-
-  # Sin Direct Connect
-  direct_connect_disabled = true
-
-  # Sin nodos worker adicionales
-  no_worker_nodes = true
-
-  # Sin routing especial
-  f5_orchestrated_routing = true
-
-  # Sin servicios bloqueados por defecto
-  default_blocked_services = true
-
   # Modo Ingress/Egress Gateway (multi-NIC)
-  # Subnets generadas con cidrsubnet:
-  #   outside  index*2 + 1  →  AZ0=.1.0/24, AZ1=.3.0/24, AZ2=.5.0/24
-  #   inside   index*2 + 2  →  AZ0=.2.0/24, AZ1=.4.0/24, AZ2=.6.0/24
   ingress_egress_gw {
     aws_certified_hw = var.certified_hw
 
@@ -74,8 +50,7 @@ resource "volterra_aws_vpc_site" "site" {
     no_network_policy        = true
     no_inside_static_routes  = true
     no_outside_static_routes = true
-    forward_proxy_allow_all  = true
-    sm_connection_public_ip  = true
+    no_forward_proxy         = true
 
     dynamic "az_nodes" {
       for_each = var.az_names
@@ -97,7 +72,6 @@ resource "volterra_aws_vpc_site" "site" {
     }
   }
 
-  # Logs enviados a F5 XC global controller
   logs_streaming_disabled = true
 
   labels = var.labels

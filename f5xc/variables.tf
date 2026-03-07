@@ -28,12 +28,6 @@ variable "site_name" {
   type        = string
 }
 
-variable "site_description" {
-  description = "Descripción del site"
-  type        = string
-  default     = ""
-}
-
 # ─── AWS ──────────────────────────────────────────────────────────────────────
 variable "aws_region" {
   description = "Región de AWS donde se desplegará el site"
@@ -42,13 +36,13 @@ variable "aws_region" {
 }
 
 variable "aws_access_key" {
-  description = "AWS Access Key ID para las credenciales cloud en F5 XC"
+  description = "AWS Access Key ID (usado en F5 XC cloud credentials y en el provider AWS)"
   type        = string
   sensitive   = true
 }
 
 variable "aws_secret_key" {
-  description = "AWS Secret Access Key para las credenciales cloud en F5 XC"
+  description = "AWS Secret Access Key (usado en F5 XC cloud credentials y en el provider AWS)"
   type        = string
   sensitive   = true
 }
@@ -61,19 +55,34 @@ variable "aws_credentials_name" {
 
 # ─── VPC / Networking ─────────────────────────────────────────────────────────
 variable "vpc_cidr" {
-  description = "CIDR de la VPC que se creará (dejar vacío para autogenerar)"
+  description = "CIDR de la VPC que se creará"
   type        = string
   default     = "192.168.0.0/16"
 }
 
-variable "az_names" {
-  description = "Lista de AZs a usar (mínimo 1, hasta 3 para HA). Las subnets se generan automáticamente con cidrsubnet: AZ[0]=.1.0/24, AZ[1]=.2.0/24, AZ[2]=.3.0/24"
+variable "master_nodes_az_names" {
+  description = "Lista de AZs para los nodos master (1 o 3 para HA)"
   type        = list(string)
   default     = ["us-east-1a"]
 }
 
-# subnet_cidr eliminado: cada AZ recibe su propio /24 automáticamente
-# usando cidrsubnet(vpc_cidr, 8, index + 1) en main.tf
+variable "inside_subnets" {
+  description = "CIDRs de las subnets internas (una por AZ)"
+  type        = list(string)
+  default     = []
+}
+
+variable "outside_subnets" {
+  description = "CIDRs de las subnets externas (una por AZ)"
+  type        = list(string)
+  default     = []
+}
+
+variable "workload_subnets" {
+  description = "CIDRs de las subnets de workload (una por AZ)"
+  type        = list(string)
+  default     = []
+}
 
 # ─── Instance / Access ───────────────────────────────────────────────────────
 variable "instance_type" {
@@ -88,19 +97,9 @@ variable "ssh_key" {
   sensitive   = true
 }
 
-# ─── Node type ────────────────────────────────────────────────────────────────
-variable "certified_hw" {
-  description = "Hardware certificado F5 XC para el nodo CE en AWS (var: AWS_XC_HW_PROFILE)"
-  type        = string
-  default     = "aws-byol-multi-nic-voltmesh"
-  # Otros valores posibles:
-  #   aws-byol-single-nic-voltmesh
-  #   aws-byol-voltstack-combo
-}
-
 # ─── Labels / Metadata ────────────────────────────────────────────────────────
 variable "labels" {
-  description = "Labels adicionales que se aplicarán al site"
+  description = "Tags/labels adicionales que se aplicarán a los recursos"
   type        = map(string)
   default     = {}
 }

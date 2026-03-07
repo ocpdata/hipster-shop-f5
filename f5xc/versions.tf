@@ -12,9 +12,9 @@ terraform {
       source  = "volterraedge/volterra"
       version = ">= 0.11.26"
     }
-    time = {
-      source  = "hashicorp/time"
-      version = ">= 0.9.0"
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 4.65.0"
     }
   }
 }
@@ -24,4 +24,10 @@ provider "volterra" {
   # La contraseña del .p12 se lee desde la env var VES_P12_PASSWORD
   api_p12_file = var.xc_api_p12_file
   url          = var.xc_api_url
+}
+
+provider "aws" {
+  region     = var.aws_region
+  access_key = var.aws_access_key
+  secret_key = var.aws_secret_key
 }

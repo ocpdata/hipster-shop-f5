@@ -141,6 +141,15 @@ jobs:
           xc_api_url           = "${{ secrets.XC_API_URL }}"
           EOF
 
+      - name: Destroy existing site (cleanup stale state)
+        run: |
+          # Si existe un site previo en estado de validación fallida, lo destruimos
+          # antes de crear uno nuevo. Ignoramos errores si no existe.
+          terraform destroy -input=false -auto-approve \
+            -target=volterra_tf_params_action.apply_site \
+            -target=volterra_aws_vpc_site.site \
+            || echo "No existing resources to destroy or destroy failed (continuing)"
+
       - name: Terraform Plan
         run: terraform plan -input=false -out=tfplan
 

@@ -62,9 +62,8 @@ resource "volterra_aws_vpc_site" "site" {
 
   # Modo Ingress/Egress Gateway (multi-NIC)
   # Subnets generadas con cidrsubnet:
-  #   outside  index*3 + 1  →  AZ0=.1.0/24, AZ1=.4.0/24
-  #   inside   index*3 + 2  →  AZ0=.2.0/24, AZ1=.5.0/24
-  #   workload index*3 + 3  →  AZ0=.3.0/24, AZ1=.6.0/24
+  #   outside  index*2 + 1  →  AZ0=.1.0/24, AZ1=.3.0/24, AZ2=.5.0/24
+  #   inside   index*2 + 2  →  AZ0=.2.0/24, AZ1=.4.0/24, AZ2=.6.0/24
   ingress_egress_gw {
     aws_certified_hw = var.certified_hw
 
@@ -83,19 +82,13 @@ resource "volterra_aws_vpc_site" "site" {
 
         outside_subnet {
           subnet_param {
-            ipv4 = cidrsubnet(var.vpc_cidr, 8, index(var.az_names, az_nodes.value) * 3 + 1)
+            ipv4 = cidrsubnet(var.vpc_cidr, 8, index(var.az_names, az_nodes.value) * 2 + 1)
           }
         }
 
         inside_subnet {
           subnet_param {
-            ipv4 = cidrsubnet(var.vpc_cidr, 8, index(var.az_names, az_nodes.value) * 3 + 2)
-          }
-        }
-
-        workload_subnet {
-          subnet_param {
-            ipv4 = cidrsubnet(var.vpc_cidr, 8, index(var.az_names, az_nodes.value) * 3 + 3)
+            ipv4 = cidrsubnet(var.vpc_cidr, 8, index(var.az_names, az_nodes.value) * 2 + 2)
           }
         }
       }

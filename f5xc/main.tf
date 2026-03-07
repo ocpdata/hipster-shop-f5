@@ -30,7 +30,6 @@ resource "volterra_aws_vpc_site" "site" {
   aws_cred {
     name      = volterra_cloud_credentials.aws.name
     namespace = var.f5xc_namespace
-    tenant    = var.f5xc_tenant
   }
 
   # VPC — se crea una nueva VPC con el CIDR indicado

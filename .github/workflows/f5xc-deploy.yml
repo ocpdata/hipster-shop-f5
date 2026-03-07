@@ -12,7 +12,7 @@ on:
 #   XC_TENANT                 → nombre del tenant (ej: my-company)
 #   TFC_TOKEN                 → token de API de Terraform Cloud
 #   TFC_ORG                   → nombre de la organización en Terraform Cloud
-#   AWS_SSH_PUBLIC_KEY        → SSH_PRIVATE_KEY (clave privada; la pública se deriva en el workflow)
+#   SSH_PRIVATE_KEY           → clave privada SSH; la clave pública se deriva en el workflow
 #
 # ─── Variables de repositorio requeridas ──────────────────────────────────────
 #   AWS_REGION           → ej: us-east-1
@@ -150,7 +150,7 @@ jobs:
           # Si existe un site previo en estado de validación fallida, lo destruimos
           # antes de crear uno nuevo. Ignoramos errores si no existe.
           terraform destroy -input=false -auto-approve \
-            -target=module.aws_vpc_site.volterra_tf_params_action.apply_site \
+            -target=module.aws_vpc_site.volterra_tf_params_action.action_apply \
             -target=module.aws_vpc_site.time_sleep.wait_30_seconds \
             -target=module.aws_vpc_site.volterra_aws_vpc_site.this \
             -target=volterra_cloud_credentials.aws \
@@ -173,22 +173,8 @@ jobs:
           curl -s \
             --cert-type P12 --cert api.p12:${VES_P12_PASSWORD} \
             "https://${TENANT_HOST}/api/config/namespaces/system/aws_vpc_sites/${SITE_NAME}" \
-            | python3 -c "
-import sys, json
-raw = sys.stdin.read()
-try:
-    d = json.loads(raw)
-    status_list = d.get('status', [])
-    print('--- object_status ---')
-    for s in status_list:
-        cond = s.get('status', {}).get('conditions', [])
-        for c in cond:
-            print('  type={} status={} reason={} msg={}'.format(
-                c.get('type'), c.get('status'), c.get('reason'), c.get('message')))
-except Exception as e:
-    print('parse error: ' + str(e))
-    print(raw)
-" 2>/dev/null || echo "curl/parse failed"
+            | jq -r '.status[]?.status?.conditions[]? | "  type=\(.type) status=\(.status) reason=\(.reason) msg=\(.message)"' \
+            2>/dev/null || echo "curl/parse failed"
 
       - name: Terraform Output
         run: terraform output

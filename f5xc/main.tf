@@ -108,7 +108,17 @@ resource "volterra_aws_vpc_site" "site" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. Apply Terraform Params — lanza el despliegue real del site en AWS
+# 3. Espera a que F5 XC complete la validación interna de config del site
+#    (la validación es asíncrona; sin espera, el apply_site falla con
+#    "config validation did not succeed")
+# ─────────────────────────────────────────────────────────────────────────────
+resource "time_sleep" "wait_for_site_validation" {
+  create_duration = "90s"
+  depends_on      = [volterra_aws_vpc_site.site]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. Apply Terraform Params — lanza el despliegue real del site en AWS
 #    (F5 XC ejecuta su propio Terraform interno para crear los recursos AWS)
 # ─────────────────────────────────────────────────────────────────────────────
 resource "volterra_tf_params_action" "apply_site" {
@@ -117,5 +127,5 @@ resource "volterra_tf_params_action" "apply_site" {
   action          = "apply"
   wait_for_action = true
 
-  depends_on = [volterra_aws_vpc_site.site]
+  depends_on = [time_sleep.wait_for_site_validation]
 }

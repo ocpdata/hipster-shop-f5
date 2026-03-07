@@ -147,6 +147,7 @@ jobs:
           # antes de crear uno nuevo. Ignoramos errores si no existe.
           terraform destroy -input=false -auto-approve \
             -target=volterra_tf_params_action.apply_site \
+            -target=time_sleep.wait_for_site_validation \
             -target=volterra_aws_vpc_site.site \
             || echo "No existing resources to destroy or destroy failed (continuing)"
 

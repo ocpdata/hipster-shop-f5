@@ -133,7 +133,7 @@ jobs:
           aws_secret_key       = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
           aws_credentials_name = "${{ vars.SITE_NAME_AWS }}-creds"
           vpc_cidr             = "${{ vars.AWS_VPC_CIDR }}"
-          az_names             = ["${{ vars.AWS_REGION }}a", "${{ vars.AWS_REGION }}b"]
+          az_names             = ["${{ vars.AWS_REGION }}a"]
           certified_hw         = "${{ vars.AWS_XC_HW_PROFILE }}"
           instance_type        = "${{ vars.AWS_INSTANCE_TYPE }}"
           ssh_key              = "${{ env.SSH_PUBLIC_KEY }}"

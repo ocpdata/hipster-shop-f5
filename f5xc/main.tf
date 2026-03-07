@@ -25,6 +25,7 @@ resource "volterra_aws_vpc_site" "site" {
 
   aws_region    = var.aws_region
   instance_type = var.instance_type
+  disk_size     = 80
   ssh_key       = var.ssh_key
 
   aws_cred {
@@ -35,6 +36,7 @@ resource "volterra_aws_vpc_site" "site" {
   # VPC — se crea una nueva VPC con el CIDR indicado
   vpc {
     new_vpc {
+      name_tag     = var.site_name
       primary_ipv4 = var.vpc_cidr
     }
   }

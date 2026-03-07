@@ -175,8 +175,9 @@ jobs:
             "https://${TENANT_HOST}/api/config/namespaces/system/aws_vpc_sites/${SITE_NAME}" \
             | python3 -c "
 import sys, json
+raw = sys.stdin.read()
 try:
-    d = json.load(sys.stdin)
+    d = json.loads(raw)
     status_list = d.get('status', [])
     print('--- object_status ---')
     for s in status_list:
@@ -185,8 +186,7 @@ try:
             print(f'  type={c.get(\"type\")} status={c.get(\"status\")} reason={c.get(\"reason\")} msg={c.get(\"message\")}')
 except Exception as e:
     print(f'parse error: {e}')
-    sys.stdin.seek(0)
-    print(sys.stdin.read())
+    print(raw)
 " 2>/dev/null || echo "curl/parse failed"
 
       - name: Terraform Output

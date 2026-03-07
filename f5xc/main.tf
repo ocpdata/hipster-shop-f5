@@ -55,7 +55,7 @@ resource "volterra_aws_vpc_site" "site" {
   no_worker_nodes = true
 
   # Sin routing especial
-  manual_routing = true
+  system_default_routing = true
 
   # Sin servicios bloqueados por defecto
   default_blocked_services = true

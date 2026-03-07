@@ -150,9 +150,14 @@ jobs:
           # Si existe un site previo en estado de validación fallida, lo destruimos
           # antes de crear uno nuevo. Ignoramos errores si no existe.
           terraform destroy -input=false -auto-approve \
-            -target=module.aws_vpc_site.volterra_tf_params_action.action_apply \
-            -target=module.aws_vpc_site.time_sleep.wait_30_seconds \
-            -target=module.aws_vpc_site.volterra_aws_vpc_site.this \
+            -target=volterra_tf_params_action.action_apply \
+            -target=time_sleep.wait_for_site_validation \
+            -target=volterra_aws_vpc_site.this \
+            -target=aws_subnet.outside \
+            -target=aws_subnet.inside \
+            -target=aws_subnet.workload \
+            -target=aws_internet_gateway.site \
+            -target=aws_vpc.site \
             -target=volterra_cloud_credentials.aws \
             || echo "No existing resources to destroy or destroy failed (continuing)"
 

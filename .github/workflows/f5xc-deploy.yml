@@ -96,7 +96,11 @@ jobs:
         env:
           VES_P12_PASSWORD: ${{ secrets.XC_P12_PASSWORD }}
         run: |
-          if openssl pkcs12 -in api.p12 -passin env:VES_P12_PASSWORD -noout 2>/dev/null; then
+          # ubuntu-latest usa OpenSSL 3.x, que requiere -legacy para .p12 generados
+          # con algoritmos antiguos (RC2-40, 3DES) como los que exporta F5 XC.
+          # Sin -legacy el error es indistinguible de una contraseña incorrecta.
+          if openssl pkcs12 -legacy -in api.p12 -passin env:VES_P12_PASSWORD -noout 2>/dev/null || \
+             openssl pkcs12 -in api.p12 -passin env:VES_P12_PASSWORD -noout 2>/dev/null; then
             echo "✅ P12 password is correct"
           else
             echo "❌ P12 password is INCORRECT - verifica que XC_P12_PASSWORD coincide con la contraseña usada al exportar el .p12"

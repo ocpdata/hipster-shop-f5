@@ -183,9 +183,10 @@ try:
     for s in status_list:
         cond = s.get('status', {}).get('conditions', [])
         for c in cond:
-            print(f'  type={c.get(\"type\")} status={c.get(\"status\")} reason={c.get(\"reason\")} msg={c.get(\"message\")}')
+            print('  type={} status={} reason={} msg={}'.format(
+                c.get('type'), c.get('status'), c.get('reason'), c.get('message')))
 except Exception as e:
-    print(f'parse error: {e}')
+    print('parse error: ' + str(e))
     print(raw)
 " 2>/dev/null || echo "curl/parse failed"
 

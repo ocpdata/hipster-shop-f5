@@ -127,6 +127,9 @@ jobs:
         env:
           TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
           TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+          TF_VAR_vpc_cidr: ${{ vars.VPC_CIDR }}
+          TF_VAR_private_subnets: ${{ vars.PRIVATE_SUBNETS }}
+          TF_VAR_public_subnets: ${{ vars.PUBLIC_SUBNETS }}
 
       - name: Eliminar workspace de Terraform Cloud
         if: success()

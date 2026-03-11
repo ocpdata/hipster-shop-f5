@@ -1,0 +1,90 @@
+name: Hipster Shop - Deploy Internet (LoadBalancer)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # ------------------------------------------------------------------
+  # Desplegar hipster-shop-internet en el cluster EKS existente
+  # ------------------------------------------------------------------
+  deploy:
+    name: Deploy Hipster Shop (Internet)
+    runs-on: ubuntu-latest
+
+    env:
+      TF_WORKSPACE: eks-cluster
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform con Terraform Cloud
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TFC_TOKEN }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: eks
+        run: terraform init
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+      - name: Obtener nombre del cluster EKS
+        id: cluster
+        working-directory: eks
+        run: |
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+      - name: Configurar kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ vars.AWS_REGION }} \
+            --name ${{ steps.cluster.outputs.name }}
+
+      - name: Desplegar hipster-shop-internet
+        run: |
+          kubectl apply -f hipster-shop-internet/kubernetes-manifests.yaml --validate=false
+
+      - name: Verificar rollout de los deployments
+        run: |
+          kubectl rollout status deployment/emailservice --timeout=180s
+          kubectl rollout status deployment/checkoutservice --timeout=180s
+          kubectl rollout status deployment/recommendationservice --timeout=180s
+          kubectl rollout status deployment/frontend --timeout=300s
+          kubectl rollout status deployment/paymentservice --timeout=180s
+          kubectl rollout status deployment/productcatalogservice --timeout=180s
+          kubectl rollout status deployment/cartservice --timeout=180s
+          kubectl rollout status deployment/loadgenerator --timeout=180s
+          kubectl rollout status deployment/currencyservice --timeout=180s
+          kubectl rollout status deployment/shippingservice --timeout=180s
+          kubectl rollout status deployment/redis-cart --timeout=180s
+
+      - name: Obtener URL pública del frontend
+        run: |
+          echo "Esperando que el LoadBalancer asigne un hostname..."
+          for i in $(seq 1 24); do
+            HOSTNAME=$(kubectl get svc frontend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+            IP=$(kubectl get svc frontend -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+            ENDPOINT=${HOSTNAME:-$IP}
+            if [ -n "$ENDPOINT" ]; then
+              echo "✅ Hipster Shop disponible en: http://$ENDPOINT"
+              exit 0
+            fi
+            echo "Intento $i/24 - aún sin endpoint, esperando 10s..."
+            sleep 10
+          done
+          echo "⚠️  El LoadBalancer no asignó endpoint en 4 minutos."
+          echo "Verifica manualmente con: kubectl get svc frontend"
+          exit 1

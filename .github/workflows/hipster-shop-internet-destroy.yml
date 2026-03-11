@@ -1,0 +1,71 @@
+name: Hipster Shop - Destroy Internet (LoadBalancer)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  destroy:
+    name: Delete Hipster Shop (Internet)
+    runs-on: ubuntu-latest
+
+    env:
+      TF_WORKSPACE: eks-cluster
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform con Terraform Cloud
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TFC_TOKEN }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: eks
+        run: terraform init
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+      - name: Obtener nombre del cluster EKS
+        id: cluster
+        working-directory: eks
+        run: |
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+      - name: Configurar kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ vars.AWS_REGION }} \
+            --name ${{ steps.cluster.outputs.name }}
+
+      - name: Eliminar hipster-shop-internet del cluster
+        run: |
+          kubectl delete -f hipster-shop-internet/kubernetes-manifests.yaml --ignore-not-found=true
+
+      - name: Esperar que el LoadBalancer sea eliminado
+        run: |
+          echo "Esperando eliminación del LoadBalancer del frontend..."
+          for i in $(seq 1 12); do
+            ENDPOINT=$(kubectl get svc frontend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            SVC=$(kubectl get svc frontend 2>/dev/null || true)
+            if [ -z "$SVC" ]; then
+              echo "✅ Servicio frontend eliminado correctamente."
+              exit 0
+            fi
+            echo "Intento $i/12 - servicio aún presente, esperando 10s..."
+            sleep 10
+          done
+          echo "⚠️  El servicio no se eliminó en 2 minutos. Verifica con: kubectl get svc frontend"
+          exit 1

@@ -1,0 +1,73 @@
+name: Hipster Shop - Destroy (F5 XC)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # ------------------------------------------------------------------
+  # Eliminar hipster-shop del cluster EKS
+  # ------------------------------------------------------------------
+  destroy:
+    name: Delete Hipster Shop (F5 XC)
+    runs-on: ubuntu-latest
+
+    env:
+      TF_WORKSPACE: eks-cluster
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform con Terraform Cloud
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TFC_TOKEN }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: eks
+        run: terraform init
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+      - name: Obtener nombre del cluster EKS
+        id: cluster
+        working-directory: eks
+        run: |
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+
+      - name: Configurar kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ vars.AWS_REGION }} \
+            --name ${{ steps.cluster.outputs.name }}
+
+      - name: Eliminar hipster-shop del cluster
+        run: |
+          kubectl delete -f hipster-shop/kubernetes-manifests.yaml --ignore-not-found=true
+
+      - name: Verificar que los pods han sido eliminados
+        run: |
+          echo "Esperando eliminación de los pods..."
+          for i in $(seq 1 12); do
+            PODS=$(kubectl get pods -l 'app in (frontend,emailservice,paymentservice,productcatalogservice,cartservice,currencyservice,shippingservice,recommendationservice,checkoutservice,loadgenerator,redis-cart)' --no-headers 2>/dev/null || true)
+            if [ -z "$PODS" ]; then
+              echo "✅ Todos los pods de hipster-shop han sido eliminados."
+              exit 0
+            fi
+            echo "Intento $i/12 - pods aún presentes, esperando 10s..."
+            sleep 10
+          done
+          echo "⚠️  Algunos pods no se eliminaron en 2 minutos. Verifica con: kubectl get pods"
+          exit 1

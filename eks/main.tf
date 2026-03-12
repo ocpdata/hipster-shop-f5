@@ -39,8 +39,9 @@ module "vpc" {
   cidr = var.vpc_cidr
 
   azs             = slice(data.aws_availability_zones.available.names, 0, 3)
+  public_subnets  = var.outside_subnets
   private_subnets = var.private_subnets
-  public_subnets  = var.public_subnets
+  intra_subnets   = var.workload_subnets
 
   enable_nat_gateway   = true
   single_nat_gateway   = true
@@ -52,6 +53,11 @@ module "vpc" {
 
   private_subnet_tags = {
     "kubernetes.io/role/internal-elb" = 1
+  }
+
+  intra_subnet_tags = {
+    "kubernetes.io/role/internal-elb" = 1
+    "subnet-type"                     = "workload"
   }
 
   tags = var.tags

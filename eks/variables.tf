@@ -27,13 +27,18 @@ variable "vpc_cidr" {
   type        = string
 }
 
-variable "private_subnets" {
-  description = "Lista de CIDRs para subnets privadas"
+variable "outside_subnets" {
+  description = "Lista de CIDRs para subnets externas (acceso a internet vía IGW)"
   type        = list(string)
 }
 
-variable "public_subnets" {
-  description = "Lista de CIDRs para subnets públicas"
+variable "private_subnets" {
+  description = "Lista de CIDRs para subnets privadas (acceso a internet vía NAT)"
+  type        = list(string)
+}
+
+variable "workload_subnets" {
+  description = "Lista de CIDRs para subnets de workload (sin acceso a internet)"
   type        = list(string)
 }
 

@@ -25,9 +25,19 @@ output "vpc_id" {
   value       = module.vpc.vpc_id
 }
 
+output "outside_subnets" {
+  description = "IDs de las subnets externas (outside)"
+  value       = module.vpc.public_subnets
+}
+
 output "private_subnets" {
   description = "IDs de las subnets privadas"
   value       = module.vpc.private_subnets
+}
+
+output "workload_subnets" {
+  description = "IDs de las subnets de workload"
+  value       = module.vpc.intra_subnets
 }
 
 output "configure_kubectl" {

@@ -70,10 +70,53 @@ jobs:
         run: |
           kubectl delete -f hipster-shop/kubernetes-manifests.yaml --ignore-not-found=true
 
-      - name: Esperar que los LoadBalancers sean eliminados
+      - name: Esperar que todos los LoadBalancers sean eliminados en AWS
         run: |
-          echo "Esperando eliminación de servicios tipo LoadBalancer..."
-          kubectl wait --for=delete service/frontend --timeout=120s || true
+          echo "Esperando eliminación de todos los Services tipo LoadBalancer..."
+          LB_SERVICES=$(kubectl get svc --all-namespaces -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}')
+          if [ -z "$LB_SERVICES" ]; then
+            echo "No hay LoadBalancers activos."
+          else
+            echo "LoadBalancers encontrados: $LB_SERVICES"
+            kubectl delete svc --all-namespaces -l app --field-selector spec.type=LoadBalancer --ignore-not-found=true || true
+          fi
+
+          echo "Esperando 60s para que AWS elimine los ELBs y sus Security Groups..."
+          sleep 60
+
+          # Verificar que no queden ELBs activos en AWS
+          REMAINING=$(aws elb describe-load-balancers --query 'LoadBalancerDescriptions[*].LoadBalancerName' --output text 2>/dev/null || true)
+          REMAINING_V2=$(aws elbv2 describe-load-balancers --query 'LoadBalancers[*].LoadBalancerArn' --output text 2>/dev/null || true)
+          if [ -n "$REMAINING" ] || [ -n "$REMAINING_V2" ]; then
+            echo "Aún hay ELBs activos, esperando 60s adicionales..."
+            sleep 60
+          fi
+
+      - name: Eliminar PersistentVolumeClaims para liberar EBS volumes
+        run: |
+          kubectl delete pvc --all --all-namespaces --ignore-not-found=true || true
+          echo "Esperando 30s para que AWS libere los EBS volumes..."
+          sleep 30
+
+      - name: Liberar ENIs del cluster antes del destroy
+        run: |
+          CLUSTER_NAME="${{ steps.cluster.outputs.name }}"
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=${CLUSTER_NAME}-vpc" \
+            --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
+
+          if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+            echo "VPC encontrada: $VPC_ID. Verificando ENIs huérfanas..."
+            ENI_IDS=$(aws ec2 describe-network-interfaces \
+              --filters "Name=vpc-id,Values=${VPC_ID}" "Name=status,Values=available" \
+              --query 'NetworkInterfaces[*].NetworkInterfaceId' --output text)
+            for ENI in $ENI_IDS; do
+              echo "Eliminando ENI huérfana: $ENI"
+              aws ec2 delete-network-interface --network-interface-id "$ENI" || true
+            done
+          else
+            echo "No se encontró la VPC o ya fue eliminada."
+          fi
 
   # ------------------------------------------------------------------
   # Job 2: Destruir la infraestructura EKS con Terraform
@@ -128,8 +171,9 @@ jobs:
           TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
           TF_VAR_aws_region: ${{ vars.AWS_REGION }}
           TF_VAR_vpc_cidr: ${{ vars.VPC_CIDR }}
+          TF_VAR_outside_subnets: ${{ vars.OUTSIDE_SUBNETS }}
           TF_VAR_private_subnets: ${{ vars.PRIVATE_SUBNETS }}
-          TF_VAR_public_subnets: ${{ vars.PUBLIC_SUBNETS }}
+          TF_VAR_workload_subnets: ${{ vars.WORKLOAD_SUBNETS }}
 
       - name: Eliminar workspace de Terraform Cloud
         if: success()

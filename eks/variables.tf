@@ -25,21 +25,25 @@ variable "environment" {
 variable "vpc_cidr" {
   description = "CIDR block para la VPC"
   type        = string
+  default     = ""
 }
 
 variable "outside_subnets" {
   description = "Lista de CIDRs para subnets externas (acceso a internet vía IGW)"
   type        = list(string)
+  default     = []
 }
 
 variable "private_subnets" {
   description = "Lista de CIDRs para subnets privadas (acceso a internet vía NAT)"
   type        = list(string)
+  default     = []
 }
 
 variable "workload_subnets" {
   description = "Lista de CIDRs para subnets de workload (sin acceso a internet)"
   type        = list(string)
+  default     = []
 }
 
 variable "node_instance_types" {

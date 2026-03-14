@@ -20,7 +20,9 @@ resource "volterra_discovery" "eks" {
       }
     }
     publish_info {
-      publish {}
+      publish {
+        namespace = var.f5xc_namespace
+      }
     }
   }
 

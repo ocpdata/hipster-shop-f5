@@ -1,0 +1,305 @@
+name: XC AWS VPC Existente – Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Escribe DESTROY para confirmar la eliminación del site"
+        required: true
+
+# ─── Secrets requeridos ───────────────────────────────────────────────────────
+#   AWS_ACCESS_KEY_ID     → IAM Access Key
+#   AWS_SECRET_ACCESS_KEY → IAM Secret Key
+#   XC_API_P12_FILE       → cat api-creds.p12 | base64 -w0
+#   XC_API_URL            → https://<tenant>.console.ves.volterra.io/api
+#   XC_P12_PASSWORD       → contraseña del .p12 en texto plano
+#   TFC_TOKEN             → token de API de Terraform Cloud
+#   TFC_ORG               → nombre de la organización en Terraform Cloud
+#
+# ─── Variables de repositorio requeridas ──────────────────────────────────────
+#   AWS_REGION                → ej: us-east-1
+#   TFC_WORKSPACE_VPC_EXISTENTE   → nombre del workspace en Terraform Cloud (ej: xc-aws-vpc-existente)
+#
+# ─── Datos de VPC/subnets ─────────────────────────────────────────────────────
+#   Se leen automáticamente de los outputs del workspace eks-cluster en TFC.
+
+permissions:
+  contents: read
+
+env:
+  TF_WORKING_DIR: ./aws-vpc-existente-ing-eg-multi-az
+
+jobs:
+  # ------------------------------------------------------------------
+  # Job 1: Leer outputs del workspace EKS (VPC ID y subnet IDs)
+  # ------------------------------------------------------------------
+  get-eks-outputs:
+    name: Get EKS VPC Outputs
+    runs-on: ubuntu-latest
+    outputs:
+      vpc_id:           ${{ steps.eks-out.outputs.vpc_id }}
+      outside_subnets:  ${{ steps.eks-out.outputs.outside_subnets }}
+      inside_subnets:   ${{ steps.eks-out.outputs.inside_subnets }}
+      workload_subnets: ${{ steps.eks-out.outputs.workload_subnets }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+          terraform_wrapper: false
+
+      - name: Terraform Init (workspace eks-cluster)
+        working-directory: eks
+        run: terraform init -input=false
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+          TF_WORKSPACE: eks-cluster
+
+      - name: Leer outputs del state EKS
+        id: eks-out
+        working-directory: eks
+        run: |
+          VPC_ID=$(terraform output -raw vpc_id)
+          OUTSIDE=$(terraform output -json outside_subnets)
+          PRIVATE=$(terraform output -json private_subnets)
+          WORKLOAD=$(terraform output -json workload_subnets)
+          echo "vpc_id=${VPC_ID}"            >> $GITHUB_OUTPUT
+          echo "outside_subnets=${OUTSIDE}"  >> $GITHUB_OUTPUT
+          echo "inside_subnets=${PRIVATE}"   >> $GITHUB_OUTPUT
+          echo "workload_subnets=${WORKLOAD}" >> $GITHUB_OUTPUT
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+          TF_WORKSPACE: eks-cluster
+
+  # ------------------------------------------------------------------
+  # Job 2: Destruir el site F5 XC
+  # ------------------------------------------------------------------
+  terraform-destroy:
+    name: "Destroy · XC AWS VPC Site (VPC existente)"
+    runs-on: ubuntu-latest
+    needs: get-eks-outputs
+    environment: production   # requiere aprobación manual si está configurado
+
+    env:
+      VES_P12_PASSWORD: ${{ secrets.XC_P12_PASSWORD }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+      TF_WORKSPACE: ${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    defaults:
+      run:
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+    steps:
+      - name: Verify confirmation input
+        if: ${{ github.event.inputs.confirm != 'DESTROY' }}
+        run: |
+          echo "❌ Confirmación incorrecta. Escribe exactamente 'DESTROY' para continuar."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+
+      - name: Write F5 XC API credentials
+        env:
+          XC_API_P12_FILE: ${{ secrets.XC_API_P12_FILE }}
+        run: |
+          printf '%s' "${XC_API_P12_FILE}" | tr -d '\n\r ' | base64 -d > api.p12
+          chmod 600 api.p12
+
+      - name: Verify workspace exists in Terraform Cloud
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG: ${{ secrets.TFC_ORG }}
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}")
+
+          if [ "$STATUS" = "404" ]; then
+            echo "El workspace '${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}' no existe. No hay nada que destruir."
+            exit 1
+          else
+            echo "Workspace '${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}' encontrado (HTTP $STATUS), procediendo con destroy..."
+          fi
+
+      - name: Verify P12 password
+        run: |
+          if openssl pkcs12 -legacy -in api.p12 -passin env:VES_P12_PASSWORD -noout 2>/dev/null || \
+             openssl pkcs12 -in api.p12 -passin env:VES_P12_PASSWORD -noout 2>/dev/null; then
+            echo "✅ P12 password is correct"
+          else
+            echo "❌ P12 password is INCORRECT - verifica que XC_P12_PASSWORD coincide con la contraseña usada al exportar el .p12"
+            exit 1
+          fi
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Generate tfvars
+        run: |
+          cat <<EOF > ci.auto.tfvars
+          xc_api_p12_file           = "./api.p12"
+          xc_api_url                = "${{ secrets.XC_API_URL }}"
+          aws_access_key            = "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws_secret_key            = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          vpc_id                    = "${{ needs.get-eks-outputs.outputs.vpc_id }}"
+          existing_outside_subnets  = ${{ needs.get-eks-outputs.outputs.outside_subnets }}
+          existing_inside_subnets   = ${{ needs.get-eks-outputs.outputs.inside_subnets }}
+          existing_workload_subnets = ${{ needs.get-eks-outputs.outputs.workload_subnets }}
+          EOF
+
+      - name: Terraform Plan (destroy)
+        run: terraform plan -input=false -destroy -out=tfplan-destroy
+
+      - name: Terraform Destroy
+        run: terraform apply -input=false -auto-approve tfplan-destroy
+
+      - name: Delete TFC workspace
+        if: success()
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG: ${{ secrets.TFC_ORG }}
+        run: |
+          echo "Eliminando workspace '${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}' de Terraform Cloud..."
+          curl -s \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            --request DELETE \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}"
+          echo "Workspace '${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}' eliminado."
+
+      - name: Cleanup credentials
+        if: always()
+        run: |
+          rm -f api.p12
+          rm -f ci.auto.tfvars
+
+permissions:
+  contents: read
+
+env:
+  TF_WORKING_DIR: ./aws-vpc-existente-ing-eg-multi-az
+
+jobs:
+  terraform-destroy:
+    name: "Destroy · XC AWS VPC Site (VPC existente)"
+    runs-on: ubuntu-latest
+    environment: production   # requiere aprobación manual si está configurado
+
+    env:
+      VES_P12_PASSWORD: ${{ secrets.XC_P12_PASSWORD }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+      TF_WORKSPACE: ${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    defaults:
+      run:
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+    steps:
+      - name: Verify confirmation input
+        if: ${{ github.event.inputs.confirm != 'DESTROY' }}
+        run: |
+          echo "❌ Confirmación incorrecta. Escribe exactamente 'DESTROY' para continuar."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+
+      - name: Write F5 XC API credentials
+        env:
+          XC_API_P12_FILE: ${{ secrets.XC_API_P12_FILE }}
+        run: |
+          printf '%s' "${XC_API_P12_FILE}" | tr -d '\n\r ' | base64 -d > api.p12
+          chmod 600 api.p12
+
+      - name: Verify workspace exists in Terraform Cloud
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG: ${{ secrets.TFC_ORG }}
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}")
+
+          if [ "$STATUS" = "404" ]; then
+            echo "El workspace '${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}' no existe. No hay nada que destruir."
+            exit 1
+          else
+            echo "Workspace '${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}' encontrado (HTTP $STATUS), procediendo con destroy..."
+          fi
+
+      - name: Verify P12 password
+        run: |
+          if openssl pkcs12 -legacy -in api.p12 -passin env:VES_P12_PASSWORD -noout 2>/dev/null || \
+             openssl pkcs12 -in api.p12 -passin env:VES_P12_PASSWORD -noout 2>/dev/null; then
+            echo "✅ P12 password is correct"
+          else
+            echo "❌ P12 password is INCORRECT - verifica que XC_P12_PASSWORD coincide con la contraseña usada al exportar el .p12"
+            exit 1
+          fi
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Generate tfvars
+        run: |
+          cat <<EOF > ci.auto.tfvars
+          xc_api_p12_file           = "./api.p12"
+          xc_api_url                = "${{ secrets.XC_API_URL }}"
+          aws_access_key            = "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws_secret_key            = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          vpc_id                    = "${{ vars.VPC_ID }}"
+          existing_outside_subnets  = ${{ vars.OUTSIDE_SUBNET_IDS }}
+          existing_inside_subnets   = ${{ vars.INSIDE_SUBNET_IDS }}
+          existing_workload_subnets = ${{ vars.WORKLOAD_SUBNET_IDS }}
+          EOF
+
+      - name: Terraform Plan (destroy)
+        run: terraform plan -input=false -destroy -out=tfplan-destroy
+
+      - name: Terraform Destroy
+        run: terraform apply -input=false -auto-approve tfplan-destroy
+
+      - name: Delete TFC workspace
+        if: success()
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG: ${{ secrets.TFC_ORG }}
+        run: |
+          echo "Eliminando workspace '${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}' de Terraform Cloud..."
+          curl -s \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            --request DELETE \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}"
+          echo "Workspace '${{ vars.TFC_WORKSPACE_VPC_EXISTENTE }}' eliminado."
+
+      - name: Cleanup credentials
+        if: always()
+        run: |
+          rm -f api.p12
+          rm -f ci.auto.tfvars

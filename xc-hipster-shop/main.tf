@@ -31,7 +31,6 @@ resource "volterra_discovery" "eks" {
       ref {
         name      = var.site_name
         namespace = "system"
-        tenant    = var.f5xc_tenant
       }
       network_type = "VIRTUAL_NETWORK_SITE_LOCAL_INSIDE"
     }
@@ -52,7 +51,6 @@ resource "volterra_origin_pool" "frontend" {
         site {
           name      = var.site_name
           namespace = "system"
-          tenant    = var.f5xc_tenant
         }
       }
       inside_network = true
@@ -87,7 +85,6 @@ resource "volterra_http_loadbalancer" "frontend" {
         site {
           name      = var.site_name
           namespace = "system"
-          tenant    = var.f5xc_tenant
         }
       }
     }
@@ -98,7 +95,6 @@ resource "volterra_http_loadbalancer" "frontend" {
     pool {
       name      = volterra_origin_pool.frontend.name
       namespace = var.f5xc_namespace
-      tenant    = var.f5xc_tenant
     }
     weight   = 1
     priority = 1

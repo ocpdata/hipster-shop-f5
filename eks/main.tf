@@ -64,52 +64,6 @@ module "vpc" {
 }
 
 # -----------------------------------------------
-# Subnets dedicadas para F5 XC (sin route table associations)
-# El módulo terraform-aws-modules/vpc asocia route tables a TODAS sus subnets,
-# lo que impide que F5 XC gestione sus propias rutas. Por eso se crean estas
-# subnets como recursos independientes, sin ninguna route table asociada.
-# F5 XC las tomará durante action_apply y asignará sus propias route tables.
-# -----------------------------------------------
-resource "aws_subnet" "xc_outside" {
-  count             = length(var.xc_outside_subnets)
-  vpc_id            = module.vpc.vpc_id
-  cidr_block        = var.xc_outside_subnets[count.index]
-  availability_zone = slice(data.aws_availability_zones.available.names, 0, 3)[count.index]
-
-  tags = merge(var.tags, {
-    Name             = "${var.cluster_name}-xc-outside-${count.index + 1}"
-    "f5xc-subnet"    = "outside"
-    "f5xc-managed"   = "true"
-  })
-}
-
-resource "aws_subnet" "xc_inside" {
-  count             = length(var.xc_inside_subnets)
-  vpc_id            = module.vpc.vpc_id
-  cidr_block        = var.xc_inside_subnets[count.index]
-  availability_zone = slice(data.aws_availability_zones.available.names, 0, 3)[count.index]
-
-  tags = merge(var.tags, {
-    Name             = "${var.cluster_name}-xc-inside-${count.index + 1}"
-    "f5xc-subnet"    = "inside"
-    "f5xc-managed"   = "true"
-  })
-}
-
-resource "aws_subnet" "xc_workload" {
-  count             = length(var.xc_workload_subnets)
-  vpc_id            = module.vpc.vpc_id
-  cidr_block        = var.xc_workload_subnets[count.index]
-  availability_zone = slice(data.aws_availability_zones.available.names, 0, 3)[count.index]
-
-  tags = merge(var.tags, {
-    Name             = "${var.cluster_name}-xc-workload-${count.index + 1}"
-    "f5xc-subnet"    = "workload"
-    "f5xc-managed"   = "true"
-  })
-}
-
-# -----------------------------------------------
 # EKS Cluster
 # -----------------------------------------------
 module "eks" {

@@ -50,21 +50,6 @@ output "workload_subnets" {
   value       = module.vpc.intra_subnets
 }
 
-output "xc_outside_subnets" {
-  description = "IDs de las subnets outside dedicadas a F5 XC (sin route table previa)"
-  value       = aws_subnet.xc_outside[*].id
-}
-
-output "xc_inside_subnets" {
-  description = "IDs de las subnets inside dedicadas a F5 XC (sin route table previa)"
-  value       = aws_subnet.xc_inside[*].id
-}
-
-output "xc_workload_subnets" {
-  description = "IDs de las subnets workload dedicadas a F5 XC (sin route table previa)"
-  value       = aws_subnet.xc_workload[*].id
-}
-
 output "configure_kubectl" {
   description = "Comando para configurar kubectl y conectarse al cluster"
   value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}"

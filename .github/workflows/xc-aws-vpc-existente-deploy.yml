@@ -13,14 +13,14 @@ on:
 #   TFC_ORG               → nombre de la organización en Terraform Cloud
 #
 # ─── Variables de repositorio requeridas ──────────────────────────────────────
-#   AWS_REGION                  → ej: us-east-1
-#   SITE_NAME_AWS                → nombre del site en F5 XC (ej: eks-vpc-site)
-
-#   TFC_WORKSPACE_VPC_EXISTENTE → nombre del workspace en Terraform Cloud (ej: xc-aws-vpc-existente)
+#   SITE_NAME_AWS               → nombre del site en F5 XC (ej: aws-site)
+#   TFC_WORKSPACE_VPC_EXISTENTE → nombre del workspace en Terraform Cloud
 #
-# ─── Datos de VPC/subnets ─────────────────────────────────────────────────────
-#   Se leen automáticamente de los outputs del workspace eks-cluster en TFC.
-#   No es necesario configurar VPC_ID ni subnet IDs como variables del repositorio.
+# ─── Datos de VPC ─────────────────────────────────────────────────────────────
+#   vpc_id y aws_region se leen automáticamente del workspace eks-cluster en TFC.
+#   Las subnets dedicadas para F5 XC las crea el propio módulo Terraform
+#   (aws-vpc-existente-ing-eg-multi-az) como recursos aws_subnet independientes,
+#   sin route table associations, para que F5 XC gestione su propio routing.
 
 permissions:
   contents: read
@@ -36,15 +36,8 @@ jobs:
     name: Get EKS VPC Outputs
     runs-on: ubuntu-latest
     outputs:
-      vpc_id:          ${{ steps.eks-out.outputs.vpc_id }}
-      aws_region:      ${{ steps.eks-out.outputs.aws_region }}
-      outside_subnets: ${{ steps.eks-out.outputs.outside_subnets }}
-      inside_subnets:  ${{ steps.eks-out.outputs.inside_subnets }}
-      workload_subnets: ${{ steps.eks-out.outputs.workload_subnets }}
-    # Nota: outside/inside/workload aquí son las subnets DEDICADAS a XC
-    # (xc_outside_subnets, xc_inside_subnets, xc_workload_subnets en el state EKS)
-    # Son subnets sin route table previa, creadas exclusivamente para que
-    # F5 XC gestione su propia conectividad.
+      vpc_id:     ${{ steps.eks-out.outputs.vpc_id }}
+      aws_region: ${{ steps.eks-out.outputs.aws_region }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -69,15 +62,8 @@ jobs:
         run: |
           VPC_ID=$(terraform output -raw vpc_id)
           AWS_REGION=$(terraform output -raw aws_region)
-          # Subnets DEDICADAS a XC (sin route tables previas)
-          XC_OUTSIDE=$(terraform output -json xc_outside_subnets)
-          XC_INSIDE=$(terraform output -json xc_inside_subnets)
-          XC_WORKLOAD=$(terraform output -json xc_workload_subnets)
-          echo "vpc_id=${VPC_ID}"             >> $GITHUB_OUTPUT
-          echo "aws_region=${AWS_REGION}"     >> $GITHUB_OUTPUT
-          echo "outside_subnets=${XC_OUTSIDE}"  >> $GITHUB_OUTPUT
-          echo "inside_subnets=${XC_INSIDE}"    >> $GITHUB_OUTPUT
-          echo "workload_subnets=${XC_WORKLOAD}" >> $GITHUB_OUTPUT
+          echo "vpc_id=${VPC_ID}"         >> $GITHUB_OUTPUT
+          echo "aws_region=${AWS_REGION}" >> $GITHUB_OUTPUT
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
           TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
@@ -171,16 +157,13 @@ jobs:
       - name: Generate tfvars
         run: |
           cat <<EOF > ci.auto.tfvars
-          xc_api_p12_file           = "./api.p12"
-          xc_api_url                = "${{ secrets.XC_API_URL }}"
-          aws_access_key            = "${{ secrets.AWS_ACCESS_KEY_ID }}"
-          aws_secret_key            = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-          aws_region                = "${{ needs.get-eks-outputs.outputs.aws_region }}"
-          site_name                 = "${{ vars.SITE_NAME_AWS }}"
-          vpc_id                    = "${{ needs.get-eks-outputs.outputs.vpc_id }}"
-          existing_outside_subnets  = ${{ needs.get-eks-outputs.outputs.outside_subnets }}
-          existing_inside_subnets   = ${{ needs.get-eks-outputs.outputs.inside_subnets }}
-          existing_workload_subnets = ${{ needs.get-eks-outputs.outputs.workload_subnets }}
+          xc_api_p12_file = "./api.p12"
+          xc_api_url      = "${{ secrets.XC_API_URL }}"
+          aws_access_key  = "${{ secrets.AWS_ACCESS_KEY_ID }}"
+          aws_secret_key  = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          aws_region      = "${{ needs.get-eks-outputs.outputs.aws_region }}"
+          site_name       = "${{ vars.SITE_NAME_AWS }}"
+          vpc_id          = "${{ needs.get-eks-outputs.outputs.vpc_id }}"
           EOF
 
       - name: Destroy existing site (cleanup stale state)

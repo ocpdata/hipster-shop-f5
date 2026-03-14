@@ -34,32 +34,20 @@ variable "vpc_id" {
   type        = string
 }
 
-variable "existing_outside_subnets" {
-  description = "IDs de las subnets outside existentes (una por AZ: us-east-1a, us-east-1b, us-east-1c)."
+variable "xc_outside_cidr_blocks" {
+  description = "CIDRs para las subnets outside de F5 XC (SLO). No deben colisionar con las subnets EKS."
   type        = list(string)
-
-  validation {
-    condition     = length(var.existing_outside_subnets) == 3
-    error_message = "Se deben proporcionar exactamente 3 subnet IDs outside, uno por AZ."
-  }
+  default     = ["172.10.61.0/24", "172.10.62.0/24", "172.10.63.0/24"]
 }
 
-variable "existing_inside_subnets" {
-  description = "IDs de las subnets inside existentes (una por AZ: us-east-1a, us-east-1b, us-east-1c)."
+variable "xc_inside_cidr_blocks" {
+  description = "CIDRs para las subnets inside de F5 XC (SLI). No deben colisionar con las subnets EKS."
   type        = list(string)
-
-  validation {
-    condition     = length(var.existing_inside_subnets) == 3
-    error_message = "Se deben proporcionar exactamente 3 subnet IDs inside, uno por AZ."
-  }
+  default     = ["172.10.11.0/24", "172.10.12.0/24", "172.10.13.0/24"]
 }
 
-variable "existing_workload_subnets" {
-  description = "IDs de las subnets workload existentes (una por AZ: us-east-1a, us-east-1b, us-east-1c)."
+variable "xc_workload_cidr_blocks" {
+  description = "CIDRs para las subnets workload de F5 XC. No deben colisionar con las subnets EKS."
   type        = list(string)
-
-  validation {
-    condition     = length(var.existing_workload_subnets) == 3
-    error_message = "Se deben proporcionar exactamente 3 subnet IDs workload, uno por AZ."
-  }
+  default     = ["172.10.111.0/24", "172.10.112.0/24", "172.10.113.0/24"]
 }

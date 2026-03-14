@@ -46,29 +46,6 @@ variable "workload_subnets" {
   default     = []
 }
 
-# -----------------------------------------------
-# Subnets dedicadas para F5 XC (sin route tables)
-# F5 XC gestiona sus propias route tables en estas subnets.
-# Deben ser ranges libres dentro del VPC CIDR que no colisionen con las subnets EKS.
-# -----------------------------------------------
-variable "xc_outside_subnets" {
-  description = "CIDRs para subnets outside de F5 XC (SLO). Sin route table previa."
-  type        = list(string)
-  default     = ["172.10.61.0/24", "172.10.62.0/24", "172.10.63.0/24"]
-}
-
-variable "xc_inside_subnets" {
-  description = "CIDRs para subnets inside de F5 XC (SLI). Sin route table previa."
-  type        = list(string)
-  default     = ["172.10.11.0/24", "172.10.12.0/24", "172.10.13.0/24"]
-}
-
-variable "xc_workload_subnets" {
-  description = "CIDRs para subnets workload de F5 XC. Sin route table previa."
-  type        = list(string)
-  default     = ["172.10.111.0/24", "172.10.112.0/24", "172.10.113.0/24"]
-}
-
 variable "node_instance_types" {
   description = "Tipos de instancia para los nodos del cluster"
   type        = list(string)

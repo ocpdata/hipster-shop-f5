@@ -9,15 +9,55 @@ provider "aws" {
   secret_key = var.aws_secret_key
 }
 
+# Obtiene las AZs disponibles en la región para asignar una por subnet
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
 # Obtiene el CIDR de la VPC existente para los Security Groups
 data "aws_vpc" "existing" {
   id = var.vpc_id
 }
 
-# Obtiene las AZs reales de las subnets outside para el mapeo correcto
-data "aws_subnet" "outside" {
-  count = length(var.existing_outside_subnets)
-  id    = var.existing_outside_subnets[count.index]
+# -----------------------------------------------
+# Subnets dedicadas para F5 XC (sin route table associations)
+# Creadas como recursos independientes para que F5 XC gestione
+# su propio routing. AWS asigna solo la ruta local implícita.
+# -----------------------------------------------
+resource "aws_subnet" "xc_outside" {
+  count             = 3
+  vpc_id            = var.vpc_id
+  cidr_block        = var.xc_outside_cidr_blocks[count.index]
+  availability_zone = slice(data.aws_availability_zones.available.names, 0, 3)[count.index]
+
+  tags = {
+    Name           = "${var.site_name}-xc-outside-${count.index + 1}"
+    "f5xc-managed" = "true"
+  }
+}
+
+resource "aws_subnet" "xc_inside" {
+  count             = 3
+  vpc_id            = var.vpc_id
+  cidr_block        = var.xc_inside_cidr_blocks[count.index]
+  availability_zone = slice(data.aws_availability_zones.available.names, 0, 3)[count.index]
+
+  tags = {
+    Name           = "${var.site_name}-xc-inside-${count.index + 1}"
+    "f5xc-managed" = "true"
+  }
+}
+
+resource "aws_subnet" "xc_workload" {
+  count             = 3
+  vpc_id            = var.vpc_id
+  cidr_block        = var.xc_workload_cidr_blocks[count.index]
+  availability_zone = slice(data.aws_availability_zones.available.names, 0, 3)[count.index]
+
+  tags = {
+    Name           = "${var.site_name}-xc-workload-${count.index + 1}"
+    "f5xc-managed" = "true"
+  }
 }
 
 # Crea la Global Virtual Network en F5 XC para conectividad multi-cloud
@@ -111,14 +151,14 @@ module "aws_vpc_site" {
   site_name             = var.site_name
   aws_region            = var.aws_region
   site_type             = "ingress_egress_gw"
-  master_nodes_az_names = [for s in data.aws_subnet.outside : s.availability_zone]
+  master_nodes_az_names = aws_subnet.xc_outside[*].availability_zone
 
   # Usa una VPC existente en lugar de crear una nueva
   create_aws_vpc            = false
   vpc_id                    = var.vpc_id
-  existing_outside_subnets  = var.existing_outside_subnets
-  existing_inside_subnets   = var.existing_inside_subnets
-  existing_workload_subnets = var.existing_workload_subnets
+  existing_outside_subnets  = aws_subnet.xc_outside[*].id
+  existing_inside_subnets   = aws_subnet.xc_inside[*].id
+  existing_workload_subnets = aws_subnet.xc_workload[*].id
 
   # Security groups explícitos para interfaz outside e inside
   custom_security_group = {
@@ -148,6 +188,9 @@ module "aws_vpc_site" {
     volterra_virtual_network.global,
     aws_security_group.outside,
     aws_security_group.inside,
+    aws_subnet.xc_outside,
+    aws_subnet.xc_inside,
+    aws_subnet.xc_workload,
   ]
 }
 

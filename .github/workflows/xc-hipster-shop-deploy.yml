@@ -178,8 +178,9 @@ MANIFEST
 
           # Construir kubeconfig estático con kubectl config (sin heredoc)
           KUBECONFIG=./kubeconfig.yaml kubectl config set-cluster eks-cluster \
-            --server="${CLUSTER_ENDPOINT}" \
-            --certificate-authority-data="${CA_DATA}"
+            --server="${CLUSTER_ENDPOINT}"
+          KUBECONFIG=./kubeconfig.yaml kubectl config set \
+            clusters.eks-cluster.certificate-authority-data "${CA_DATA}"
           KUBECONFIG=./kubeconfig.yaml kubectl config set-credentials xc-discovery \
             --token="${SA_TOKEN}"
           KUBECONFIG=./kubeconfig.yaml kubectl config set-context xc-context \

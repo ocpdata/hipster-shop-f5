@@ -4,14 +4,19 @@ provider "volterra" {
 }
 
 provider "aws" {
-  region     = "us-east-1"
+  region     = var.aws_region
   access_key = var.aws_access_key
   secret_key = var.aws_secret_key
 }
 
+# Obtiene el CIDR de la VPC existente para los Security Groups
+data "aws_vpc" "existing" {
+  id = var.vpc_id
+}
+
 # Crea la Global Virtual Network en F5 XC para conectividad multi-cloud
 resource "volterra_virtual_network" "global" {
-  name      = "aws-existing-vpc-global-vn"
+  name      = "${var.site_name}-global-vn"
   namespace = "system"
 
   global_network = true
@@ -52,7 +57,7 @@ resource "aws_security_group" "outside" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["172.10.0.0/16"]
+    cidr_blocks = [data.aws_vpc.existing.cidr_block]
   }
 
   egress {
@@ -63,7 +68,7 @@ resource "aws_security_group" "outside" {
   }
 
   tags = {
-    Name = "f5xc-outside-sg"
+    Name = "${var.site_name}-outside-sg"
   }
 }
 
@@ -78,7 +83,7 @@ resource "aws_security_group" "inside" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["172.10.0.0/16"]
+    cidr_blocks = [data.aws_vpc.existing.cidr_block]
   }
 
   egress {
@@ -89,7 +94,7 @@ resource "aws_security_group" "inside" {
   }
 
   tags = {
-    Name = "f5xc-inside-sg"
+    Name = "${var.site_name}-inside-sg"
   }
 }
 
@@ -97,10 +102,10 @@ module "aws_vpc_site" {
   source  = "f5devcentral/aws-vpc-site/xc"
   version = "0.0.12"
 
-  site_name             = "aws-existing-vpc-ing-eg-multi-az"
-  aws_region            = "us-east-1"
+  site_name             = var.site_name
+  aws_region            = var.aws_region
   site_type             = "ingress_egress_gw"
-  master_nodes_az_names = ["us-east-1a", "us-east-1b", "us-east-1c"]
+  master_nodes_az_names = ["${var.aws_region}a", "${var.aws_region}b", "${var.aws_region}c"]
 
   # Usa una VPC existente en lugar de crear una nueva
   create_aws_vpc            = false
@@ -128,8 +133,8 @@ module "aws_vpc_site" {
   }]
 
   tags = {
-    key1 = "value1"
-    key2 = "value2"
+    site = var.site_name
+    managed-by = "terraform"
   }
 
   depends_on = [
@@ -145,11 +150,11 @@ module "aws_cloud_credentials" {
   version = "0.0.4"
 
   tags = {
-    key1 = "value1"
-    key2 = "value2"
+    site       = var.site_name
+    managed-by = "terraform"
   }
 
-  name           = "aws-existing-vpc-creds"
+  name           = "${var.site_name}-creds"
   aws_access_key = var.aws_access_key
   aws_secret_key = var.aws_secret_key
 }

@@ -19,6 +19,16 @@ variable "aws_secret_key" {
   default   = null
 }
 
+variable "aws_region" {
+  description = "Región de AWS donde se desplegará el sitio F5 XC."
+  type        = string
+}
+
+variable "site_name" {
+  description = "Nombre del AWS VPC Site en F5 XC."
+  type        = string
+}
+
 variable "vpc_id" {
   description = "ID de la VPC existente en AWS donde se desplegará el sitio F5 XC."
   type        = string

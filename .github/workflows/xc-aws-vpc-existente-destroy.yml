@@ -17,8 +17,10 @@ on:
 #   TFC_ORG               → nombre de la organización en Terraform Cloud
 #
 # ─── Variables de repositorio requeridas ──────────────────────────────────────
-#   AWS_REGION                → ej: us-east-1
-#   TFC_WORKSPACE_VPC_EXISTENTE   → nombre del workspace en Terraform Cloud (ej: xc-aws-vpc-existente)
+#   AWS_REGION                  → ej: us-east-1
+#   SITE_NAME_AWS                → nombre del site en F5 XC (ej: eks-vpc-site)
+
+#   TFC_WORKSPACE_VPC_EXISTENTE → nombre del workspace en Terraform Cloud (ej: xc-aws-vpc-existente)
 #
 # ─── Datos de VPC/subnets ─────────────────────────────────────────────────────
 #   Se leen automáticamente de los outputs del workspace eks-cluster en TFC.
@@ -39,6 +41,7 @@ jobs:
     if: ${{ github.event.inputs.confirm == 'DESTROY' }}
     outputs:
       vpc_id:           ${{ steps.eks-out.outputs.vpc_id }}
+      aws_region:       ${{ steps.eks-out.outputs.aws_region }}
       outside_subnets:  ${{ steps.eks-out.outputs.outside_subnets }}
       inside_subnets:   ${{ steps.eks-out.outputs.inside_subnets }}
       workload_subnets: ${{ steps.eks-out.outputs.workload_subnets }}
@@ -66,10 +69,12 @@ jobs:
         working-directory: eks
         run: |
           VPC_ID=$(terraform output -raw vpc_id)
+          AWS_REGION=$(terraform output -raw aws_region)
           OUTSIDE=$(terraform output -json outside_subnets)
           PRIVATE=$(terraform output -json private_subnets)
           WORKLOAD=$(terraform output -json workload_subnets)
           echo "vpc_id=${VPC_ID}"            >> $GITHUB_OUTPUT
+          echo "aws_region=${AWS_REGION}"    >> $GITHUB_OUTPUT
           echo "outside_subnets=${OUTSIDE}"  >> $GITHUB_OUTPUT
           echo "inside_subnets=${PRIVATE}"   >> $GITHUB_OUTPUT
           echo "workload_subnets=${WORKLOAD}" >> $GITHUB_OUTPUT
@@ -151,6 +156,8 @@ jobs:
           xc_api_url                = "${{ secrets.XC_API_URL }}"
           aws_access_key            = "${{ secrets.AWS_ACCESS_KEY_ID }}"
           aws_secret_key            = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          aws_region                = "${{ needs.get-eks-outputs.outputs.aws_region }}"
+          site_name                 = "${{ vars.SITE_NAME_AWS }}"
           vpc_id                    = "${{ needs.get-eks-outputs.outputs.vpc_id }}"
           existing_outside_subnets  = ${{ needs.get-eks-outputs.outputs.outside_subnets }}
           existing_inside_subnets   = ${{ needs.get-eks-outputs.outputs.inside_subnets }}

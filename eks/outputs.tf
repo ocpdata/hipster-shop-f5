@@ -1,3 +1,8 @@
+output "aws_region" {
+  description = "Región de AWS del cluster EKS"
+  value       = var.aws_region
+}
+
 output "cluster_name" {
   description = "Nombre del cluster EKS"
   value       = module.eks.cluster_name

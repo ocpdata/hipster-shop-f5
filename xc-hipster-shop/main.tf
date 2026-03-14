@@ -72,8 +72,8 @@ resource "volterra_http_loadbalancer" "frontend" {
   name      = "${var.app_name}-lb"
   namespace = var.f5xc_namespace
 
-  # Dominio: custom o auto-generado por F5 XC
-  domains = local.use_custom_domain ? [var.app_domain] : []
+  # Dominio: custom o wildcard (acepta cualquier host header)
+  domains = local.use_custom_domain ? [var.app_domain] : ["*"]
 
   # Advertise en internet usando el VIP público por defecto de F5 XC
   advertise_on_public_default_vip = true

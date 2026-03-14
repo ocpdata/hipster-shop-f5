@@ -78,26 +78,16 @@ jobs:
             --name ${{ steps.cluster.outputs.name }} \
             --query "cluster.endpoint" --output text)
 
-          cat > ./kubeconfig.yaml <<KUBECFG
-          apiVersion: v1
-          kind: Config
-          clusters:
-            - name: eks-cluster
-              cluster:
-                server: ${CLUSTER_ENDPOINT}
-                certificate-authority-data: ${CA_DATA}
-          users:
-            - name: xc-discovery
-              user:
-                token: ${SA_TOKEN}
-          contexts:
-            - name: xc-context
-              context:
-                cluster: eks-cluster
-                user: xc-discovery
-                namespace: default
-          current-context: xc-context
-          KUBECFG
+          KUBECONFIG=./kubeconfig.yaml kubectl config set-cluster eks-cluster \
+            --server="${CLUSTER_ENDPOINT}" \
+            --certificate-authority-data="${CA_DATA}"
+          KUBECONFIG=./kubeconfig.yaml kubectl config set-credentials xc-discovery \
+            --token="${SA_TOKEN}"
+          KUBECONFIG=./kubeconfig.yaml kubectl config set-context xc-context \
+            --cluster=eks-cluster \
+            --user=xc-discovery \
+            --namespace=default
+          KUBECONFIG=./kubeconfig.yaml kubectl config use-context xc-context
 
       - name: Generate tfvars
         run: |

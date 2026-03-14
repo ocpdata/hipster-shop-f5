@@ -119,56 +119,52 @@ jobs:
       - name: Generar kubeconfig estático para F5 XC
         id: kubeconfig
         run: |
-          # Configurar kubectl con exec-auth temporalmente para crear el SA
+          # kubectl con exec-auth temporalmente para crear el SA
           aws eks update-kubeconfig \
             --region ${{ vars.AWS_REGION }} \
             --name ${{ steps.cluster.outputs.name }}
 
-          # Crear ServiceAccount + ClusterRoleBinding para XC Service Discovery
-          kubectl apply -f - <<EOF
-          apiVersion: v1
-          kind: ServiceAccount
-          metadata:
-            name: xc-discovery
-            namespace: default
-          ---
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: xc-discovery-token
-            namespace: default
-            annotations:
-              kubernetes.io/service-account.name: xc-discovery
-          type: kubernetes.io/service-account-token
-          ---
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: ClusterRole
-          metadata:
-            name: xc-discovery-reader
-          rules:
-            - apiGroups: [""]
-              resources: ["pods", "endpoints", "services", "namespaces", "nodes"]
-              verbs: ["get", "list", "watch"]
-            - apiGroups: ["apps"]
-              resources: ["deployments", "replicasets"]
-              verbs: ["get", "list", "watch"]
-          ---
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: ClusterRoleBinding
-          metadata:
-            name: xc-discovery-reader-binding
-          roleRef:
-            apiGroup: rbac.authorization.k8s.io
-            kind: ClusterRole
-            name: xc-discovery-reader
-          subjects:
-            - kind: ServiceAccount
-              name: xc-discovery
-              namespace: default
-          EOF
+          # Crear ServiceAccount + Secret de token estático + RBAC
+          kubectl create serviceaccount xc-discovery -n default --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl apply -f - << 'MANIFEST'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: xc-discovery-token
+  namespace: default
+  annotations:
+    kubernetes.io/service-account.name: xc-discovery
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: xc-discovery-reader
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "endpoints", "services", "namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: xc-discovery-reader-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: xc-discovery-reader
+subjects:
+  - kind: ServiceAccount
+    name: xc-discovery
+    namespace: default
+MANIFEST
 
           # Esperar a que el token sea populado
-          sleep 5
+          kubectl wait --for=jsonpath='{.data.token}' secret/xc-discovery-token -n default --timeout=30s
 
           # Extraer token y CA del Secret
           SA_TOKEN=$(kubectl get secret xc-discovery-token -n default \
@@ -180,27 +176,17 @@ jobs:
             --name ${{ steps.cluster.outputs.name }} \
             --query "cluster.endpoint" --output text)
 
-          # Construir kubeconfig estático (sin exec, token embebido)
-          cat > ./kubeconfig.yaml <<KUBECFG
-          apiVersion: v1
-          kind: Config
-          clusters:
-            - name: eks-cluster
-              cluster:
-                server: ${CLUSTER_ENDPOINT}
-                certificate-authority-data: ${CA_DATA}
-          users:
-            - name: xc-discovery
-              user:
-                token: ${SA_TOKEN}
-          contexts:
-            - name: xc-context
-              context:
-                cluster: eks-cluster
-                user: xc-discovery
-                namespace: default
-          current-context: xc-context
-          KUBECFG
+          # Construir kubeconfig estático con kubectl config (sin heredoc)
+          KUBECONFIG=./kubeconfig.yaml kubectl config set-cluster eks-cluster \
+            --server="${CLUSTER_ENDPOINT}" \
+            --certificate-authority-data="${CA_DATA}"
+          KUBECONFIG=./kubeconfig.yaml kubectl config set-credentials xc-discovery \
+            --token="${SA_TOKEN}"
+          KUBECONFIG=./kubeconfig.yaml kubectl config set-context xc-context \
+            --cluster=eks-cluster \
+            --user=xc-discovery \
+            --namespace=default
+          KUBECONFIG=./kubeconfig.yaml kubectl config use-context xc-context
 
       - name: Generate tfvars
         run: |

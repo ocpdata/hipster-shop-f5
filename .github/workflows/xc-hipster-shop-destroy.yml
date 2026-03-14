@@ -51,13 +51,14 @@ jobs:
       - name: Terraform Init
         run: terraform init -input=false
 
-      - name: Obtener nombre del cluster EKS
+      - name: Obtener datos del cluster EKS
         id: cluster
         working-directory: eks
         run: |
           terraform init -input=false
-          CLUSTER_NAME=$(terraform output -raw cluster_name)
-          echo "name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+          echo "name=$(terraform output -raw cluster_name)" >> $GITHUB_OUTPUT
+          echo "endpoint=$(terraform output -raw cluster_endpoint)" >> $GITHUB_OUTPUT
+          echo "ca=$(terraform output -raw cluster_certificate_authority_data)" >> $GITHUB_OUTPUT
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
           TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
@@ -71,17 +72,11 @@ jobs:
 
           SA_TOKEN=$(kubectl get secret xc-discovery-token -n default \
             -o jsonpath='{.data.token}' | base64 -d)
-          CA_DATA=$(kubectl get secret xc-discovery-token -n default \
-            -o jsonpath='{.data.ca\.crt}')
-          CLUSTER_ENDPOINT=$(aws eks describe-cluster \
-            --region ${{ vars.AWS_REGION }} \
-            --name ${{ steps.cluster.outputs.name }} \
-            --query "cluster.endpoint" --output text)
 
           KUBECONFIG=./kubeconfig.yaml kubectl config set-cluster eks-cluster \
-            --server="${CLUSTER_ENDPOINT}"
+            --server="${{ steps.cluster.outputs.endpoint }}"
           KUBECONFIG=./kubeconfig.yaml kubectl config set \
-            clusters.eks-cluster.certificate-authority-data "${CA_DATA}"
+            clusters.eks-cluster.certificate-authority-data "${{ steps.cluster.outputs.ca }}"
           KUBECONFIG=./kubeconfig.yaml kubectl config set-credentials xc-discovery \
             --token="${SA_TOKEN}"
           KUBECONFIG=./kubeconfig.yaml kubectl config set-context xc-context \

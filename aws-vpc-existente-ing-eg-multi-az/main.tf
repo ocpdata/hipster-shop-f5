@@ -94,7 +94,8 @@ resource "aws_security_group" "inside" {
 }
 
 module "aws_vpc_site" {
-  source = "../.."
+  source  = "f5devcentral/aws-vpc-site/xc"
+  version = "0.0.12"
 
   site_name             = "aws-existing-vpc-ing-eg-multi-az"
   aws_region            = "us-east-1"

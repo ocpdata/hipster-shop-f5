@@ -179,6 +179,20 @@ jobs:
           existing_workload_subnets = ${{ needs.get-eks-outputs.outputs.workload_subnets }}
           EOF
 
+      - name: Destroy existing site (cleanup stale state)
+        run: |
+          # Si el site quedó en estado de validación fallida en un intento previo,
+          # lo destruimos antes de volver a crear. Se ignoran errores si no existe.
+          terraform destroy -input=false -auto-approve \
+            -target=module.aws_vpc_site.volterra_tf_params_action.action_apply \
+            -target=module.aws_vpc_site.time_sleep.wait_for_site_validation \
+            -target=module.aws_vpc_site.volterra_aws_vpc_site.this \
+            -target=module.aws_cloud_credentials.volterra_cloud_credentials.aws \
+            -target=volterra_virtual_network.global \
+            -target=aws_security_group.outside \
+            -target=aws_security_group.inside \
+            || echo "No existing resources to destroy or destroy failed (continuing)"
+
       - name: Terraform Plan
         run: terraform plan -input=false -out=tfplan
 

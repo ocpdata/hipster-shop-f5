@@ -104,19 +104,18 @@ resource "volterra_http_loadbalancer" "frontend" {
     priority = 1
   }
 
-  # HTTP (sin TLS por ahora — añadir certifcado para HTTPS)
-  no_tls = true
+  # HTTP (sin TLS por ahora — añadir certificado para HTTPS)
+  http {
+    dns_volterra_managed = false
+    port                 = "80"
+  }
 
   # Deshabilitar WAF y políticas adicionales (se pueden activar después)
-  disable_waf                     = true
-  no_challenge                    = true
-  disable_rate_limit              = true
-  no_service_policies             = true
-  no_ip_reputation                = true
-  multi_lb_app                    = false
-  user_id_client_ip               = true
-  source_ip_stickiness            = false
-  add_location                    = true
+  disable_waf         = true
+  no_challenge        = true
+  disable_rate_limit  = true
+  no_service_policies = true
+  add_location        = true
 
   depends_on = [volterra_origin_pool.frontend]
 }

@@ -41,7 +41,10 @@ jobs:
       outside_subnets: ${{ steps.eks-out.outputs.outside_subnets }}
       inside_subnets:  ${{ steps.eks-out.outputs.inside_subnets }}
       workload_subnets: ${{ steps.eks-out.outputs.workload_subnets }}
-
+    # Nota: outside/inside/workload aquí son las subnets DEDICADAS a XC
+    # (xc_outside_subnets, xc_inside_subnets, xc_workload_subnets en el state EKS)
+    # Son subnets sin route table previa, creadas exclusivamente para que
+    # F5 XC gestione su propia conectividad.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -66,14 +69,15 @@ jobs:
         run: |
           VPC_ID=$(terraform output -raw vpc_id)
           AWS_REGION=$(terraform output -raw aws_region)
-          OUTSIDE=$(terraform output -json outside_subnets)
-          PRIVATE=$(terraform output -json private_subnets)
-          WORKLOAD=$(terraform output -json workload_subnets)
-          echo "vpc_id=${VPC_ID}"           >> $GITHUB_OUTPUT
-          echo "aws_region=${AWS_REGION}"   >> $GITHUB_OUTPUT
-          echo "outside_subnets=${OUTSIDE}" >> $GITHUB_OUTPUT
-          echo "inside_subnets=${PRIVATE}"  >> $GITHUB_OUTPUT
-          echo "workload_subnets=${WORKLOAD}" >> $GITHUB_OUTPUT
+          # Subnets DEDICADAS a XC (sin route tables previas)
+          XC_OUTSIDE=$(terraform output -json xc_outside_subnets)
+          XC_INSIDE=$(terraform output -json xc_inside_subnets)
+          XC_WORKLOAD=$(terraform output -json xc_workload_subnets)
+          echo "vpc_id=${VPC_ID}"             >> $GITHUB_OUTPUT
+          echo "aws_region=${AWS_REGION}"     >> $GITHUB_OUTPUT
+          echo "outside_subnets=${XC_OUTSIDE}"  >> $GITHUB_OUTPUT
+          echo "inside_subnets=${XC_INSIDE}"    >> $GITHUB_OUTPUT
+          echo "workload_subnets=${XC_WORKLOAD}" >> $GITHUB_OUTPUT
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
           TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
@@ -193,11 +197,38 @@ jobs:
             -target=aws_security_group.inside \
             || echo "No existing resources to destroy or destroy failed (continuing)"
 
-      - name: Terraform Plan
-        run: terraform plan -input=false -out=tfplan
+      # ─── Stage 1 ──────────────────────────────────────────────────────────────
+      # Crea las credenciales, VN, SGs y el site object.
+      # El módulo incluye un time_sleep de 120 s antes de action_apply, pero eso
+      # no siempre es suficiente para que F5 XC complete su validación interna.
+      # Por eso excluimos action_apply aquí y añadimos 5 min de espera adicional.
+      - name: "Terraform Apply – Stage 1 (create site + credentials)"
+        run: |
+          terraform apply -input=false -auto-approve \
+            -target=module.aws_cloud_credentials \
+            -target=volterra_virtual_network.global \
+            -target=aws_security_group.outside \
+            -target=aws_security_group.inside \
+            -target=module.aws_vpc_site.volterra_aws_vpc_site.this \
+            -target=module.aws_vpc_site.time_sleep.wait_30_seconds
 
-      - name: Terraform Apply
-        run: terraform apply -input=false -auto-approve tfplan
+      # ─── Espera extendida ─────────────────────────────────────────────────────
+      # El módulo ya esperó 120 s (time_sleep). Añadimos 5 min más para garantizar
+      # que F5 XC termine la validación interna antes de llamar a action_apply.
+      - name: "Wait – F5 XC config validation (5 min)"
+        run: |
+          echo "Stage 1 completado. Esperando 5 minutos para que F5 XC finalice la validación del site..."
+          for i in $(seq 1 5); do
+            sleep 60
+            echo "  ${i}/5 min transcurridos..."
+          done
+          echo "Continuando con Stage 2."
+
+      # ─── Stage 2 ──────────────────────────────────────────────────────────────
+      # Aplica los recursos restantes: action_apply (deploy real del site en AWS)
+      # y volterra_cloud_site_labels. El site debe estar en estado PLANNED en XC.
+      - name: "Terraform Apply – Stage 2 (deploy site via action_apply)"
+        run: terraform apply -input=false -auto-approve
 
       - name: Terraform Output
         run: terraform output

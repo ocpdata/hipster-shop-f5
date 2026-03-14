@@ -98,3 +98,17 @@ module "eks" {
 
   tags = var.tags
 }
+
+# -----------------------------------------------
+# Permitir tráfico desde el CE de F5 XC (inside subnets) hacia los pods
+# El CE usa la red inside (172.10.11-13.0/24) para alcanzar los pod IPs
+# -----------------------------------------------
+resource "aws_security_group_rule" "xc_ce_to_pods" {
+  type              = "ingress"
+  description       = "F5 XC CE inside network → EKS pods"
+  from_port         = 0
+  to_port           = 65535
+  protocol          = "tcp"
+  cidr_blocks       = var.xc_inside_cidr_blocks
+  security_group_id = module.eks.node_security_group_id
+}

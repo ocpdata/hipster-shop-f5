@@ -79,3 +79,9 @@ variable "tags" {
     Project     = "eks-cluster"
   }
 }
+
+variable "xc_inside_cidr_blocks" {
+  description = "CIDRs de las subnets inside del CE de F5 XC — se permite su acceso a los pods EKS"
+  type        = list(string)
+  default     = ["172.10.11.0/24", "172.10.12.0/24", "172.10.13.0/24"]
+}

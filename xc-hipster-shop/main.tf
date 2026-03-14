@@ -75,20 +75,8 @@ resource "volterra_http_loadbalancer" "frontend" {
   # Dominio: custom o auto-generado por F5 XC
   domains = local.use_custom_domain ? [var.app_domain] : []
 
-  # Advertise en internet desde el site AWS
-  advertise_custom {
-    advertise_where {
-      port = 80
-      site {
-        ip          = "DEFAULT_INTERFACE_IP"
-        network     = "SITE_NETWORK_OUTSIDE"
-        site {
-          name      = var.site_name
-          namespace = "system"
-        }
-      }
-    }
-  }
+  # Advertise en internet usando el VIP público por defecto de F5 XC
+  advertise_on_public_default_vip = true
 
   # Routing: todo el tráfico va al origin pool del frontend
   default_route_pools {

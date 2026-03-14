@@ -53,3 +53,9 @@ variable "k8s_namespace" {
   type        = string
   default     = "default"
 }
+
+variable "kubeconfig" {
+  description = "Contenido completo del kubeconfig del cluster EKS (obtenido con: aws eks update-kubeconfig --region <region> --name <cluster>)"
+  type        = string
+  sensitive   = true
+}

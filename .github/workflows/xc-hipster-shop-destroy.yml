@@ -25,6 +25,8 @@ jobs:
       TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
       TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
       TF_WORKSPACE: ${{ vars.TFC_WORKSPACE_HIPSTER_SHOP }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     defaults:
       run:
@@ -49,6 +51,25 @@ jobs:
       - name: Terraform Init
         run: terraform init -input=false
 
+      - name: Obtener nombre del cluster EKS
+        id: cluster
+        working-directory: eks
+        run: |
+          terraform init -input=false
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+          TF_WORKSPACE: eks-cluster
+
+      - name: Generar kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ vars.AWS_REGION }} \
+            --name ${{ steps.cluster.outputs.name }} \
+            --kubeconfig ./kubeconfig.yaml
+
       - name: Generate tfvars
         run: |
           cat <<EOF > ci.auto.tfvars
@@ -59,6 +80,9 @@ jobs:
           site_name       = "${{ vars.SITE_NAME_AWS }}"
           app_domain      = "${{ vars.APP_DOMAIN }}"
           EOF
+          printf 'kubeconfig = <<KUBECONFIG\n' >> ci.auto.tfvars
+          cat ./kubeconfig.yaml >> ci.auto.tfvars
+          printf '\nKUBECONFIG\n' >> ci.auto.tfvars
 
       - name: Terraform Destroy
         run: terraform destroy -input=false -auto-approve
@@ -68,3 +92,4 @@ jobs:
         run: |
           rm -f api.p12
           rm -f ci.auto.tfvars
+          rm -f kubeconfig.yaml

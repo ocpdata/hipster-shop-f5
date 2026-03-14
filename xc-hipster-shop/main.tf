@@ -5,26 +5,22 @@ locals {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Service Discovery — descubre los servicios Kubernetes del cluster EKS
-#    vía el nodo F5 XC desplegado en la VPC (sin kubeconfig externo).
+#    usando el kubeconfig del cluster (pasado como variable sensible).
 # ─────────────────────────────────────────────────────────────────────────────
 resource "volterra_discovery" "eks" {
   name      = "${var.app_name}-discovery"
   namespace = var.f5xc_namespace
 
-  # Descubrimiento vía XC site (el nodo CE accede al API server de EKS
-  # desde dentro de la VPC usando la ruta local)
   discovery_k8s {
     access_info {
-      connection_info {
-        api_server = "https://kubernetes.default.svc"
-        tls_info {
-          insecure_skip_verify = true
+      kubeconfig_url {
+        clear_secret_info {
+          url = "string:///${base64encode(var.kubeconfig)}"
         }
       }
-      in_cluster = true
     }
     publish_info {
-      publish = true
+      publish {}
     }
   }
 

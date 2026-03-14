@@ -12,6 +12,7 @@ on:
 #   TFC_ORG           → nombre de la organización en Terraform Cloud
 #
 # ─── Variables de repositorio requeridas ──────────────────────────────────────
+#   AWS_REGION                  → región AWS donde está el cluster EKS (ej: us-east-1)
 #   SITE_NAME_AWS               → nombre del AWS VPC Site en F5 XC (ej: aws-site)
 #   XC_NAMESPACE                → namespace F5 XC (ej: default)
 #   APP_DOMAIN                  → dominio público (ej: hipster-shop.example.com)
@@ -34,6 +35,8 @@ jobs:
       TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
       TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
       TF_WORKSPACE: ${{ vars.TFC_WORKSPACE_HIPSTER_SHOP }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     defaults:
       run:
@@ -101,6 +104,25 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
+      - name: Obtener nombre del cluster EKS
+        id: cluster
+        working-directory: eks
+        run: |
+          terraform init -input=false
+          CLUSTER_NAME=$(terraform output -raw cluster_name)
+          echo "name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+          TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+          TF_WORKSPACE: eks-cluster
+
+      - name: Generar kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ vars.AWS_REGION }} \
+            --name ${{ steps.cluster.outputs.name }} \
+            --kubeconfig ./kubeconfig.yaml
+
       - name: Generate tfvars
         run: |
           cat <<EOF > ci.auto.tfvars
@@ -111,6 +133,9 @@ jobs:
           site_name       = "${{ vars.SITE_NAME_AWS }}"
           app_domain      = "${{ vars.APP_DOMAIN }}"
           EOF
+          printf 'kubeconfig = <<KUBECONFIG\n' >> ci.auto.tfvars
+          cat ./kubeconfig.yaml >> ci.auto.tfvars
+          printf '\nKUBECONFIG\n' >> ci.auto.tfvars
 
       - name: Terraform Plan
         run: terraform plan -input=false -out=tfplan
@@ -126,3 +151,4 @@ jobs:
         run: |
           rm -f api.p12
           rm -f ci.auto.tfvars
+          rm -f kubeconfig.yaml

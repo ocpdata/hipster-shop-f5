@@ -3,6 +3,11 @@ output "aws_region" {
   value       = var.aws_region
 }
 
+output "az_names" {
+  description = "AZs reales usadas por el módulo VPC (no necesariamente a/b/c)"
+  value       = slice(data.aws_availability_zones.available.names, 0, 3)
+}
+
 output "cluster_name" {
   description = "Nombre del cluster EKS"
   value       = module.eks.cluster_name

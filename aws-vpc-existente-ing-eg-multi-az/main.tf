@@ -14,6 +14,12 @@ data "aws_vpc" "existing" {
   id = var.vpc_id
 }
 
+# Obtiene las AZs reales de las subnets outside para el mapeo correcto
+data "aws_subnet" "outside" {
+  count = length(var.existing_outside_subnets)
+  id    = var.existing_outside_subnets[count.index]
+}
+
 # Crea la Global Virtual Network en F5 XC para conectividad multi-cloud
 resource "volterra_virtual_network" "global" {
   name      = "${var.site_name}-global-vn"
@@ -105,7 +111,7 @@ module "aws_vpc_site" {
   site_name             = var.site_name
   aws_region            = var.aws_region
   site_type             = "ingress_egress_gw"
-  master_nodes_az_names = ["${var.aws_region}a", "${var.aws_region}b", "${var.aws_region}c"]
+  master_nodes_az_names = [for s in data.aws_subnet.outside : s.availability_zone]
 
   # Usa una VPC existente en lugar de crear una nueva
   create_aws_vpc            = false

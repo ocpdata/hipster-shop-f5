@@ -6,7 +6,7 @@ on:
 # ─── Variables de repositorio requeridas ──────────────────────────────────────
 #   AWS_REGION        → región AWS (ej: us-east-1)
 #   VPC_CIDR          → CIDR de la VPC (ej: 172.10.0.0/16)
-#   PRIVATE_SUBNETS   → 3 CIDRs separados por coma (ej: ["172.10.1.0/24","172.10.2.0/24","172.10.3.0/24"])
+#   PRIVATE_SUBNETS_3 → 3 CIDRs separados por coma (ej: ["172.10.1.0/24","172.10.2.0/24","172.10.3.0/24"])
 
 env:
   TF_WORKSPACE: eks-3sn
@@ -94,7 +94,7 @@ jobs:
           TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
           TF_VAR_aws_region: ${{ vars.AWS_REGION }}
           TF_VAR_vpc_cidr: ${{ vars.VPC_CIDR }}
-          TF_VAR_private_subnets: ${{ vars.PRIVATE_SUBNETS }}
+          TF_VAR_private_subnets: ${{ vars.PRIVATE_SUBNETS_3 }}
 
       - name: Subir plan como artifact
         uses: actions/upload-artifact@v4

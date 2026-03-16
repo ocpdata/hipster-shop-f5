@@ -71,7 +71,7 @@ module "eks" {
 # -----------------------------------------------
 resource "aws_security_group_rule" "xc_ce_to_pods" {
   type              = "ingress"
-  description       = "F5 XC CE inside network -> EKS pods"
+  description       = "F5 XC CE inside network to EKS pods"
   from_port         = 0
   to_port           = 65535
   protocol          = "tcp"

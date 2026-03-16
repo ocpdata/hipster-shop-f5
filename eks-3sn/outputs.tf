@@ -30,9 +30,9 @@ output "vpc_id" {
   value       = data.aws_vpc.existing.id
 }
 
-output "private_subnets" {
-  description = "IDs de las 3 subnets privadas (una por AZ)"
-  value       = var.private_subnet_ids
+output "workload_subnet_id" {
+  description = "ID de la subnet workload donde corren los nodos EKS"
+  value       = var.workload_subnet_id
 }
 
 output "configure_kubectl" {

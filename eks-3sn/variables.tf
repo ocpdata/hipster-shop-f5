@@ -27,9 +27,9 @@ variable "vpc_id" {
   type        = string
 }
 
-variable "private_subnet_ids" {
-  description = "Lista de 3 IDs de subnets privadas existentes (una por AZ)"
-  type        = list(string)
+variable "workload_subnet_id" {
+  description = "ID de la subnet workload (XC) donde se desplegaran los nodos EKS"
+  type        = string
 }
 
 variable "node_instance_types" {

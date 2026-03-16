@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
 
 # ─── Variables de repositorio requeridas ──────────────────────────────────────
-#   AWS_REGION           → región AWS (ej: us-east-1)
-#   VPC_ID               → ID de la VPC existente (ej: vpc-0abc123def)
-#   PRIVATE_SUBNET_IDS_3 → JSON list de 3 IDs de subnets existentes (ej: ["subnet-aaa","subnet-bbb","subnet-ccc"])
+#   AWS_REGION          → región AWS (ej: us-east-1)
+#   VPC_ID              → ID de la VPC existente (ej: vpc-0abc123def)
+#   WORKLOAD_SUBNET_ID  → ID de la subnet workload de F5 XC (ej: subnet-0abc123)
 
 env:
   TF_WORKSPACE: eks-3sn
@@ -94,7 +94,7 @@ jobs:
           TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
           TF_VAR_aws_region:         ${{ vars.AWS_REGION }}
           TF_VAR_vpc_id:             ${{ vars.VPC_ID }}
-          TF_VAR_private_subnet_ids: ${{ vars.PRIVATE_SUBNET_IDS_3 }}
+          TF_VAR_workload_subnet_id: ${{ vars.WORKLOAD_SUBNET_ID }}
 
       - name: Subir plan como artifact
         uses: actions/upload-artifact@v4

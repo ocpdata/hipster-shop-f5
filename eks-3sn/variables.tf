@@ -27,9 +27,9 @@ variable "vpc_id" {
   type        = string
 }
 
-variable "workload_subnet_id" {
-  description = "ID de la subnet workload (XC) donde se desplegaran los nodos EKS"
-  type        = string
+variable "workload_subnet_ids" {
+  description = "IDs de las subnets workload (XC) donde se desplegaran los nodos EKS (minimo 2 AZs)"
+  type        = list(string)
 }
 
 variable "node_instance_types" {

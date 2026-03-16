@@ -27,7 +27,8 @@ data "aws_vpc" "existing" {
 }
 
 data "aws_subnet" "workload" {
-  id = var.workload_subnet_id
+  for_each = toset(var.workload_subnet_ids)
+  id       = each.value
 }
 
 # -----------------------------------------------
@@ -45,8 +46,8 @@ module "eks" {
   enable_cluster_creator_admin_permissions = true
 
   vpc_id                   = data.aws_vpc.existing.id
-  subnet_ids               = [var.workload_subnet_id]
-  control_plane_subnet_ids = [var.workload_subnet_id]
+  subnet_ids               = var.workload_subnet_ids
+  control_plane_subnet_ids = var.workload_subnet_ids
 
   eks_managed_node_groups = {
     default = {

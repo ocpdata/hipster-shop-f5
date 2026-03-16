@@ -30,9 +30,9 @@ output "vpc_id" {
   value       = data.aws_vpc.existing.id
 }
 
-output "workload_subnet_id" {
-  description = "ID de la subnet workload donde corren los nodos EKS"
-  value       = var.workload_subnet_id
+output "workload_subnet_ids" {
+  description = "IDs de las subnets workload donde corren los nodos EKS"
+  value       = var.workload_subnet_ids
 }
 
 output "configure_kubectl" {

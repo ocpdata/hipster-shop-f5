@@ -22,16 +22,14 @@ variable "environment" {
   default     = "dev"
 }
 
-variable "vpc_cidr" {
-  description = "CIDR block para la VPC"
+variable "vpc_id" {
+  description = "ID de la VPC existente en AWS"
   type        = string
-  default     = ""
 }
 
-variable "private_subnets" {
-  description = "Lista de 3 CIDRs — una subnet privada por AZ"
+variable "private_subnet_ids" {
+  description = "Lista de 3 IDs de subnets privadas existentes (una por AZ)"
   type        = list(string)
-  default     = []
 }
 
 variable "node_instance_types" {

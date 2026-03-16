@@ -20,34 +20,15 @@ provider "aws" {
 }
 
 # -----------------------------------------------
-# Data sources
+# Data sources — VPC y subnets existentes
 # -----------------------------------------------
-data "aws_availability_zones" "available" {
-  state = "available"
+data "aws_vpc" "existing" {
+  id = var.vpc_id
 }
 
-# -----------------------------------------------
-# VPC — 1 subnet por AZ (3 subnets en total)
-# -----------------------------------------------
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.0"
-
-  name = "${var.cluster_name}-vpc"
-  cidr = var.vpc_cidr
-
-  azs            = slice(data.aws_availability_zones.available.names, 0, 3)
-  private_subnets = var.private_subnets
-
-  enable_nat_gateway   = true
-  single_nat_gateway   = true
-  enable_dns_hostnames = true
-
-  private_subnet_tags = {
-    "kubernetes.io/role/internal-elb" = 1
-  }
-
-  tags = var.tags
+data "aws_subnet" "private" {
+  for_each = toset(var.private_subnet_ids)
+  id       = each.value
 }
 
 # -----------------------------------------------
@@ -64,9 +45,9 @@ module "eks" {
   cluster_endpoint_private_access          = true
   enable_cluster_creator_admin_permissions = true
 
-  vpc_id                   = module.vpc.vpc_id
-  subnet_ids               = module.vpc.private_subnets
-  control_plane_subnet_ids = module.vpc.private_subnets
+  vpc_id                   = data.aws_vpc.existing.id
+  subnet_ids               = var.private_subnet_ids
+  control_plane_subnet_ids = var.private_subnet_ids
 
   eks_managed_node_groups = {
     default = {

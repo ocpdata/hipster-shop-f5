@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
 
 # ─── Variables de repositorio requeridas ──────────────────────────────────────
-#   AWS_REGION        → región AWS (ej: us-east-1)
-#   VPC_CIDR          → CIDR de la VPC (ej: 172.10.0.0/16)
-#   PRIVATE_SUBNETS_3 → 3 CIDRs separados por coma (ej: ["172.10.1.0/24","172.10.2.0/24","172.10.3.0/24"])
+#   AWS_REGION           → región AWS (ej: us-east-1)
+#   VPC_ID               → ID de la VPC existente (ej: vpc-0abc123def)
+#   PRIVATE_SUBNET_IDS_3 → JSON list de 3 IDs de subnets existentes (ej: ["subnet-aaa","subnet-bbb","subnet-ccc"])
 
 env:
   TF_WORKSPACE: eks-3sn
@@ -92,9 +92,9 @@ jobs:
         run: terraform plan -out=tfplan
         env:
           TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
-          TF_VAR_aws_region: ${{ vars.AWS_REGION }}
-          TF_VAR_vpc_cidr: ${{ vars.VPC_CIDR }}
-          TF_VAR_private_subnets: ${{ vars.PRIVATE_SUBNETS_3 }}
+          TF_VAR_aws_region:         ${{ vars.AWS_REGION }}
+          TF_VAR_vpc_id:             ${{ vars.VPC_ID }}
+          TF_VAR_private_subnet_ids: ${{ vars.PRIVATE_SUBNET_IDS_3 }}
 
       - name: Subir plan como artifact
         uses: actions/upload-artifact@v4

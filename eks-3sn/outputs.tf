@@ -26,13 +26,13 @@ output "cluster_version" {
 }
 
 output "vpc_id" {
-  description = "ID de la VPC creada"
-  value       = module.vpc.vpc_id
+  description = "ID de la VPC utilizada"
+  value       = data.aws_vpc.existing.id
 }
 
 output "private_subnets" {
   description = "IDs de las 3 subnets privadas (una por AZ)"
-  value       = module.vpc.private_subnets
+  value       = var.private_subnet_ids
 }
 
 output "configure_kubectl" {

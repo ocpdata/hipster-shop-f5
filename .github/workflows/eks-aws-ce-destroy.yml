@@ -131,10 +131,12 @@ jobs:
             --name eks-aws-ce || true
 
       - name: Eliminar manifiestos de Hipster Shop
-        run: kubectl delete -f eks-aws-ce/k8s/hipster-shop.yaml --ignore-not-found=true
+        # El API server es privado — el runner no tiene acceso a la VPC.
+        # Los recursos K8s se eliminan automáticamente al destruir el cluster EKS.
+        run: kubectl delete -f eks-aws-ce/k8s/hipster-shop.yaml --ignore-not-found=true || true
 
       - name: Eliminar RBAC xc-discovery
-        run: kubectl delete -f eks-aws-ce/k8s/rbac.yaml --ignore-not-found=true
+        run: kubectl delete -f eks-aws-ce/k8s/rbac.yaml --ignore-not-found=true || true
 
   # ────────────────────────────────────────────────────────────────────────────
   # Stage 2a — Destruir EKS (paralelo con 2b)

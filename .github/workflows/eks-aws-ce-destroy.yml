@@ -50,7 +50,26 @@ jobs:
         with:
           terraform_version: "~> 1.7"
 
+      - name: Check if TFC workspace exists
+        id: check_ws
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG:   ${{ secrets.TFC_ORG }}
+        run: |
+          WS_NAME="eks-aws-ce-lb"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${WS_NAME}")
+          if [ "$STATUS" = "200" ]; then
+            echo "ws_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Workspace '${WS_NAME}' encontrado."
+          else
+            echo "ws_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Workspace '${WS_NAME}' no existe (HTTP $STATUS) — skip destroy."
+          fi
+
       - name: Write F5 XC API credentials
+        if: steps.check_ws.outputs.ws_exists == 'true'
         env:
           XC_API_P12_FILE: ${{ secrets.XC_API_P12_FILE }}
         run: |
@@ -58,9 +77,11 @@ jobs:
           chmod 600 api.p12
 
       - name: Terraform Init
+        if: steps.check_ws.outputs.ws_exists == 'true'
         run: terraform init -input=false
 
       - name: Generate placeholder tfvars
+        if: steps.check_ws.outputs.ws_exists == 'true'
         # Durante el destroy, Terraform lee los valores del state — estos placeholders
         # solo satisfacen la validación de variables requeridas.
         run: |
@@ -75,6 +96,7 @@ jobs:
           } > ci.auto.tfvars
 
       - name: Terraform Destroy
+        if: steps.check_ws.outputs.ws_exists == 'true'
         run: terraform destroy -input=false -auto-approve
 
       - name: Cleanup credentials
@@ -106,7 +128,7 @@ jobs:
         run: |
           aws eks update-kubeconfig \
             --region ${{ vars.AWS_REGION }} \
-            --name eks-aws-ce
+            --name eks-aws-ce || true
 
       - name: Eliminar manifiestos de Hipster Shop
         run: kubectl delete -f eks-aws-ce/k8s/hipster-shop.yaml --ignore-not-found=true
@@ -145,10 +167,30 @@ jobs:
         with:
           terraform_version: "~> 1.7"
 
+      - name: Check if TFC workspace exists
+        id: check_ws
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG:   ${{ secrets.TFC_ORG }}
+        run: |
+          WS_NAME="eks-aws-ce"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${WS_NAME}")
+          if [ "$STATUS" = "200" ]; then
+            echo "ws_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Workspace '${WS_NAME}' encontrado."
+          else
+            echo "ws_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Workspace '${WS_NAME}' no existe (HTTP $STATUS) — skip destroy."
+          fi
+
       - name: Terraform Init
+        if: steps.check_ws.outputs.ws_exists == 'true'
         run: terraform init -input=false
 
       - name: Terraform Destroy
+        if: steps.check_ws.outputs.ws_exists == 'true'
         # Placeholders para list(string): JSON válido requerido por el tipo de variable
         run: terraform destroy -input=false -auto-approve
         env:
@@ -182,7 +224,26 @@ jobs:
         with:
           terraform_version: "~> 1.7"
 
+      - name: Check if TFC workspace exists
+        id: check_ws
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG:   ${{ secrets.TFC_ORG }}
+        run: |
+          WS_NAME="eks-aws-ce-site"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${WS_NAME}")
+          if [ "$STATUS" = "200" ]; then
+            echo "ws_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Workspace '${WS_NAME}' encontrado."
+          else
+            echo "ws_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Workspace '${WS_NAME}' no existe (HTTP $STATUS) — skip destroy."
+          fi
+
       - name: Write F5 XC API credentials
+        if: steps.check_ws.outputs.ws_exists == 'true'
         env:
           XC_API_P12_FILE: ${{ secrets.XC_API_P12_FILE }}
         run: |
@@ -190,9 +251,11 @@ jobs:
           chmod 600 api.p12
 
       - name: Terraform Init
+        if: steps.check_ws.outputs.ws_exists == 'true'
         run: terraform init -input=false
 
       - name: Terraform Destroy
+        if: steps.check_ws.outputs.ws_exists == 'true'
         run: terraform destroy -input=false -auto-approve
         env:
           TF_VAR_xc_api_p12_file:    "./api.p12"
@@ -242,10 +305,30 @@ jobs:
         with:
           terraform_version: "~> 1.7"
 
+      - name: Check if TFC workspace exists
+        id: check_ws
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG:   ${{ secrets.TFC_ORG }}
+        run: |
+          WS_NAME="eks-aws-ce-vpc"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${WS_NAME}")
+          if [ "$STATUS" = "200" ]; then
+            echo "ws_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Workspace '${WS_NAME}' encontrado."
+          else
+            echo "ws_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Workspace '${WS_NAME}' no existe (HTTP $STATUS) — skip destroy."
+          fi
+
       - name: Terraform Init
+        if: steps.check_ws.outputs.ws_exists == 'true'
         run: terraform init -input=false
 
       - name: Terraform Destroy
+        if: steps.check_ws.outputs.ws_exists == 'true'
         run: terraform destroy -input=false -auto-approve
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION }}

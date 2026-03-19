@@ -304,12 +304,16 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
-      - name: Forzar re-ejecucion del wait y deploy action
-        # Debe ir ANTES del plan: el taint modifica el state, y si se ejecutara
-        # después el plan guardado quedaría stale y el apply fallaría.
+      - name: Resetear state de wait y deploy action
+        # Usa 'state rm' en lugar de 'taint' para evitar llamar a la API destroy
+        # de volterra_tf_params_action: el destroy llama a la accion DESTROY de
+        # F5 XC que destruye el CE en AWS y resetea la validacion del site,
+        # haciendo que el siguiente apply falle con 'config validation did not succeed'.
+        # 'state rm' elimina los recursos del state local SIN llamar ninguna API,
+        # el CE en AWS queda intacto y la validacion del site permanece completa.
         run: |
-          terraform taint time_sleep.wait_for_site_validation || true
-          terraform taint volterra_tf_params_action.deploy || true
+          terraform state rm volterra_tf_params_action.deploy || true
+          terraform state rm time_sleep.wait_for_site_validation || true
         env:
           TF_VAR_xc_api_p12_file:    "./api.p12"
           TF_VAR_xc_api_url:         ${{ secrets.XC_API_URL }}

@@ -1,0 +1,512 @@
+name: EKS AWS CE – Deploy
+
+# ─── Descripción del workflow ──────────────────────────────────────────────────
+# Orquesta el despliegue completo del escenario EKS + F5 XC Customer Edge (CE).
+# Toda la red se genera automáticamente desde VPC_CIDR usando cidrsubnet().
+#
+#   Stage 0 – vpc:          VPC + subnets privadas (EKS/CE-inside) + subnets outside (CE)
+#   Stage 1a – eks:         Cluster EKS privado (ClusterIP only) — paralelo con 1b
+#   Stage 1b – ce:          Customer Edge F5 XC en AWS (multi-NIC) — paralelo con 1a
+#   Stage 2 – hipster-shop: Manifiestos Kubernetes (todos ClusterIP) + RBAC
+#   Stage 3 – xc-lb:        Service Discovery + Origin Pool + HTTP LB en F5 XC
+#
+# DNS: casos.accessq.com gestionado en tu DNS propio (Route53/CF/etc.).
+# Crea un registro A apuntando a la IP pública exterior del CE tras el despliegue.
+#
+# ─── Secrets requeridos ───────────────────────────────────────────────────────
+#   AWS_ACCESS_KEY_ID       → credenciales AWS
+#   AWS_SECRET_ACCESS_KEY   → credenciales AWS
+#   SSH_PRIVATE_KEY         → clave privada SSH (la pública se deriva en CI)
+#   XC_API_P12_FILE         → cat api-creds.p12 | base64 -w0
+#   XC_API_URL              → https://<tenant>.console.ves.volterra.io/api
+#   XC_P12_PASSWORD         → contraseña del .p12 en texto plano
+#   XC_TENANT               → nombre del tenant F5 XC (ej: my-company)
+#   TFC_TOKEN               → token de API de Terraform Cloud
+#   TFC_ORG                 → nombre de la organización en Terraform Cloud
+#
+# ─── Variables de repositorio requeridas ──────────────────────────────────────
+#   AWS_REGION              → región AWS (ej: us-east-1)
+#   VPC_CIDR                → CIDR de la VPC (ej: 10.0.0.0/16)
+#   AZ_NAMES                → JSON list de AZs (ej: ["us-east-1a","us-east-1b"])
+#   XC_NAMESPACE            → namespace F5 XC (ej: default)
+#   APP_DOMAIN              → dominio de la app (ej: casos.accessq.com)
+#
+# ─── Workspaces TFC (hardcodeados, se crean automáticamente) ──────────────────
+#   eks-aws-ce-vpc   → Stack 0: red
+#   eks-aws-ce       → Stack 1a: EKS
+#   eks-aws-ce-site  → Stack 1b: CE
+#   eks-aws-ce-lb    → Stack 3: XC LB
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Stage 0 — VPC + subnets (todo derivado de VPC_CIDR)
+  # ────────────────────────────────────────────────────────────────────────────
+  vpc-create:
+    name: "Stage 0 · VPC + subnets"
+    runs-on: ubuntu-latest
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+      TF_WORKSPACE: eks-aws-ce-vpc
+    defaults:
+      run:
+        working-directory: eks-aws-ce/vpc
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+
+      - name: Create TFC workspace if not exists
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG: ${{ secrets.TFC_ORG }}
+        run: |
+          WS_NAME="eks-aws-ce-vpc"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${WS_NAME}")
+          if [ "$STATUS" = "404" ]; then
+            echo "Creando workspace '${WS_NAME}'..."
+            curl -s --fail \
+              --header "Authorization: Bearer ${TFC_TOKEN}" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request POST \
+              --data "{\"data\":{\"type\":\"workspaces\",\"attributes\":{\"name\":\"${WS_NAME}\",\"execution-mode\":\"local\"}}}" \
+              "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces"
+          else
+            echo "Workspace '${WS_NAME}' ya existe (HTTP $STATUS)."
+          fi
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -out=tfplan
+        env:
+          TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+          TF_VAR_vpc_cidr:   ${{ vars.VPC_CIDR }}
+          TF_VAR_az_names:   ${{ vars.AZ_NAMES }}
+
+      - name: Terraform Apply
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Terraform Output
+        id: vpc_output
+        run: |
+          echo "vpc_id=$(terraform output -raw vpc_id)" >> $GITHUB_OUTPUT
+          echo "private_subnet_ids=$(terraform output -json private_subnet_ids)" >> $GITHUB_OUTPUT
+          echo "private_subnet_cidrs=$(terraform output -json private_subnet_cidrs)" >> $GITHUB_OUTPUT
+          echo "outside_subnet_ids=$(terraform output -json outside_subnet_ids)" >> $GITHUB_OUTPUT
+          echo "az_names=$(terraform output -json az_names)" >> $GITHUB_OUTPUT
+
+    outputs:
+      vpc_id:               ${{ steps.vpc_output.outputs.vpc_id }}
+      private_subnet_ids:   ${{ steps.vpc_output.outputs.private_subnet_ids }}
+      private_subnet_cidrs: ${{ steps.vpc_output.outputs.private_subnet_cidrs }}
+      outside_subnet_ids:   ${{ steps.vpc_output.outputs.outside_subnet_ids }}
+      az_names:             ${{ steps.vpc_output.outputs.az_names }}
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Stage 1a — EKS Cluster (privado, ClusterIP only)
+  # ────────────────────────────────────────────────────────────────────────────
+  eks-deploy:
+    name: "Stage 1a · EKS cluster privado"
+    runs-on: ubuntu-latest
+    needs: vpc-create
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+      TF_WORKSPACE: eks-aws-ce
+    defaults:
+      run:
+        working-directory: eks-aws-ce/eks
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+
+      - name: Create TFC workspace if not exists
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG: ${{ secrets.TFC_ORG }}
+        run: |
+          WS_NAME="eks-aws-ce"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${WS_NAME}")
+          if [ "$STATUS" = "404" ]; then
+            echo "Creando workspace '${WS_NAME}'..."
+            curl -s --fail \
+              --header "Authorization: Bearer ${TFC_TOKEN}" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request POST \
+              --data "{\"data\":{\"type\":\"workspaces\",\"attributes\":{\"name\":\"${WS_NAME}\",\"execution-mode\":\"local\"}}}" \
+              "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces"
+          else
+            echo "Workspace '${WS_NAME}' ya existe (HTTP $STATUS)."
+          fi
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -out=tfplan
+        env:
+          TF_VAR_aws_region:            ${{ vars.AWS_REGION }}
+          TF_VAR_vpc_id:                ${{ needs.vpc-create.outputs.vpc_id }}
+          TF_VAR_private_subnet_ids:    ${{ needs.vpc-create.outputs.private_subnet_ids }}
+          TF_VAR_private_subnet_cidrs:  ${{ needs.vpc-create.outputs.private_subnet_cidrs }}
+
+      - name: Terraform Apply
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Terraform Output
+        id: eks_output
+        run: |
+          echo "cluster_name=$(terraform output -raw cluster_name)" >> $GITHUB_OUTPUT
+          echo "cluster_endpoint=$(terraform output -raw cluster_endpoint)" >> $GITHUB_OUTPUT
+          echo "cluster_ca=$(terraform output -raw cluster_certificate_authority_data)" >> $GITHUB_OUTPUT
+
+    outputs:
+      cluster_name:     ${{ steps.eks_output.outputs.cluster_name }}
+      cluster_endpoint: ${{ steps.eks_output.outputs.cluster_endpoint }}
+      cluster_ca:       ${{ steps.eks_output.outputs.cluster_ca }}
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Stage 1b — Customer Edge de F5 XC en la misma VPC (paralelo con 1a)
+  # ────────────────────────────────────────────────────────────────────────────
+  ce-deploy:
+    name: "Stage 1b · F5 XC Customer Edge en AWS"
+    runs-on: ubuntu-latest
+    needs: vpc-create
+    env:
+      VES_P12_PASSWORD: ${{ secrets.XC_P12_PASSWORD }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+      TF_WORKSPACE: eks-aws-ce-site
+    defaults:
+      run:
+        working-directory: eks-aws-ce/ce
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+
+      - name: Write F5 XC API credentials
+        env:
+          XC_API_P12_FILE: ${{ secrets.XC_API_P12_FILE }}
+        run: |
+          printf '%s' "${XC_API_P12_FILE}" | tr -d '\n\r ' | base64 -d > api.p12
+          chmod 600 api.p12
+
+      - name: Verify P12 password
+        run: |
+          if openssl pkcs12 -legacy -in api.p12 -passin env:VES_P12_PASSWORD -noout 2>/dev/null || \
+             openssl pkcs12 -in api.p12 -passin env:VES_P12_PASSWORD -noout 2>/dev/null; then
+            echo "P12 password correcto"
+          else
+            echo "P12 password INCORRECTO"
+            exit 1
+          fi
+
+      - name: Derivar clave publica SSH desde la clave privada
+        id: ssh_key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          echo "${SSH_PRIVATE_KEY}" > /tmp/id_rsa
+          chmod 600 /tmp/id_rsa
+          PUBLIC_KEY=$(ssh-keygen -y -f /tmp/id_rsa)
+          rm -f /tmp/id_rsa
+          echo "public_key=${PUBLIC_KEY}" >> $GITHUB_OUTPUT
+
+      - name: Create TFC workspace if not exists
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG: ${{ secrets.TFC_ORG }}
+        run: |
+          WS_NAME="eks-aws-ce-site"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${WS_NAME}")
+          if [ "$STATUS" = "404" ]; then
+            echo "Creando workspace '${WS_NAME}'..."
+            curl -s --fail \
+              --header "Authorization: Bearer ${TFC_TOKEN}" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request POST \
+              --data "{\"data\":{\"type\":\"workspaces\",\"attributes\":{\"name\":\"${WS_NAME}\",\"execution-mode\":\"local\"}}}" \
+              "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces"
+          else
+            echo "Workspace '${WS_NAME}' ya existe (HTTP $STATUS)."
+          fi
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -out=tfplan
+        env:
+          TF_VAR_xc_api_p12_file:    "./api.p12"
+          TF_VAR_xc_api_url:         ${{ secrets.XC_API_URL }}
+          TF_VAR_f5xc_tenant:        ${{ secrets.XC_TENANT }}
+          TF_VAR_aws_region:         ${{ vars.AWS_REGION }}
+          TF_VAR_aws_access_key:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key:     ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_vpc_id:             ${{ needs.vpc-create.outputs.vpc_id }}
+          TF_VAR_az_names:           ${{ needs.vpc-create.outputs.az_names }}
+          TF_VAR_outside_subnet_ids: ${{ needs.vpc-create.outputs.outside_subnet_ids }}
+          TF_VAR_inside_subnet_ids:  ${{ needs.vpc-create.outputs.private_subnet_ids }}
+          TF_VAR_ssh_key:            ${{ steps.ssh_key.outputs.public_key }}
+
+      - name: Terraform Apply
+        # El apply del CE puede tardar varios minutos (volterra_tf_params_action)
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Terraform Output
+        run: terraform output
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f api.p12
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Stage 2 — Despliegue de Hipster Shop en EKS (todos ClusterIP)
+  # ────────────────────────────────────────────────────────────────────────────
+  hipster-shop-deploy:
+    name: "Stage 2 · Hipster Shop en EKS (ClusterIP)"
+    runs-on: ubuntu-latest
+    needs: [eks-deploy, ce-deploy]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Configurar kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ vars.AWS_REGION }} \
+            --name ${{ needs.eks-deploy.outputs.cluster_name }}
+
+      - name: Aplicar RBAC para F5 XC Service Discovery
+        run: kubectl apply -f eks-aws-ce/k8s/rbac.yaml
+
+      - name: Esperar token RBAC
+        run: |
+          kubectl wait --for=jsonpath='{.data.token}' secret/xc-discovery-token \
+            -n default --timeout=60s
+
+      - name: Aplicar manifiestos de Hipster Shop (ClusterIP)
+        run: kubectl apply -f eks-aws-ce/k8s/hipster-shop.yaml
+
+      - name: Verificar pods
+        run: kubectl get pods -n default
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Stage 3 — F5 XC: Service Discovery + Origin Pool + HTTP LB via CE
+  # ────────────────────────────────────────────────────────────────────────────
+  xc-lb-deploy:
+    name: "Stage 3 · F5 XC LB via CE → frontend (ClusterIP)"
+    runs-on: ubuntu-latest
+    needs: [eks-deploy, ce-deploy, hipster-shop-deploy]
+    env:
+      VES_P12_PASSWORD: ${{ secrets.XC_P12_PASSWORD }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TFC_TOKEN }}
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TFC_ORG }}
+      TF_WORKSPACE: eks-aws-ce-lb
+    defaults:
+      run:
+        working-directory: eks-aws-ce/xc-lb
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+
+      - name: Write F5 XC API credentials
+        env:
+          XC_API_P12_FILE: ${{ secrets.XC_API_P12_FILE }}
+        run: |
+          printf '%s' "${XC_API_P12_FILE}" | tr -d '\n\r ' | base64 -d > api.p12
+          chmod 600 api.p12
+
+      - name: Generar kubeconfig estático con token de SA xc-discovery
+        run: |
+          # Actualizar kubeconfig local con credenciales exec (solo para extraer el token del SA)
+          aws eks update-kubeconfig \
+            --region ${{ vars.AWS_REGION }} \
+            --name ${{ needs.eks-deploy.outputs.cluster_name }}
+
+          # Extraer token estático del ServiceAccount
+          SA_TOKEN=$(kubectl get secret xc-discovery-token -n default \
+            -o jsonpath='{.data.token}' | base64 -d)
+
+          # Construir kubeconfig con token estático (sin exec-auth) para F5 XC
+          CLUSTER_ENDPOINT="${{ needs.eks-deploy.outputs.cluster_endpoint }}"
+          CLUSTER_CA="${{ needs.eks-deploy.outputs.cluster_ca }}"
+
+          KUBECONFIG=./kubeconfig.yaml kubectl config set-cluster eks-cluster \
+            --server="${CLUSTER_ENDPOINT}"
+          KUBECONFIG=./kubeconfig.yaml kubectl config set \
+            clusters.eks-cluster.certificate-authority-data "${CLUSTER_CA}"
+          KUBECONFIG=./kubeconfig.yaml kubectl config set-credentials xc-discovery \
+            --token="${SA_TOKEN}"
+          KUBECONFIG=./kubeconfig.yaml kubectl config set-context xc-context \
+            --cluster=eks-cluster \
+            --user=xc-discovery \
+            --namespace=default
+          KUBECONFIG=./kubeconfig.yaml kubectl config use-context xc-context
+
+      - name: Create TFC workspace if not exists
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORG: ${{ secrets.TFC_ORG }}
+        run: |
+          WS_NAME="eks-aws-ce-lb"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${WS_NAME}")
+          if [ "$STATUS" = "404" ]; then
+            echo "Creando workspace '${WS_NAME}'..."
+            curl -s --fail \
+              --header "Authorization: Bearer ${TFC_TOKEN}" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request POST \
+              --data "{\"data\":{\"type\":\"workspaces\",\"attributes\":{\"name\":\"${WS_NAME}\",\"execution-mode\":\"local\"}}}" \
+              "https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces"
+          else
+            echo "Workspace '${WS_NAME}' ya existe (HTTP $STATUS)."
+          fi
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Generate tfvars
+        run: |
+          {
+            echo 'xc_api_p12_file = "./api.p12"'
+            echo "xc_api_url      = \"${{ secrets.XC_API_URL }}\""
+            echo "f5xc_tenant     = \"${{ secrets.XC_TENANT }}\""
+            echo "f5xc_namespace  = \"${{ vars.XC_NAMESPACE }}\""
+            echo "site_name       = \"eks-aws-ce-site\""
+            echo "app_domain      = \"${{ vars.APP_DOMAIN }}\""
+            echo 'kubeconfig = <<KUBECONFIG'
+            cat ./kubeconfig.yaml
+            echo 'KUBECONFIG'
+          } > ci.auto.tfvars
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Terraform Output
+        run: terraform output
+
+      - name: Cleanup credentials
+        if: always()
+        run: |
+          rm -f api.p12
+          rm -f ci.auto.tfvars
+          rm -f kubeconfig.yaml
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Summary — instrucción DNS final al operador
+  # ────────────────────────────────────────────────────────────────────────────
+  summary:
+    name: "Resumen · Siguiente paso DNS"
+    runs-on: ubuntu-latest
+    needs: [eks-deploy, ce-deploy, hipster-shop-deploy, xc-lb-deploy]
+    if: success()
+    steps:
+      - name: Instrucción DNS
+        run: |
+          echo "════════════════════════════════════════════════════════"
+          echo "  DESPLIEGUE COMPLETO"
+          echo "════════════════════════════════════════════════════════"
+          echo ""
+          echo "  Cluster EKS: ${{ needs.eks-deploy.outputs.cluster_name }}"
+          echo "  CE Site:     eks-aws-ce-site"
+          echo "  App domain:  ${{ vars.APP_DOMAIN }}"
+          echo ""
+          echo "  PASO SIGUIENTE (manual):"
+          echo "  En tu proveedor DNS crea el registro:"
+          echo ""
+          echo "    ${{ vars.APP_DOMAIN }} IN A <IP-publica-exterior-del-CE>"
+          echo ""
+          echo "  La IP exterior del CE la encuentras en:"
+          echo "  F5 XC Console → Sites → eks-aws-ce-site → Interfaces → outside"
+          echo ""
+          echo "  URL de acceso: http://${{ vars.APP_DOMAIN }}"
+          echo "════════════════════════════════════════════════════════"

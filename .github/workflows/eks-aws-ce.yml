@@ -304,8 +304,12 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
-      - name: Terraform Plan
-        run: terraform plan -input=false -out=tfplan
+      - name: Forzar re-ejecucion del wait y deploy action
+        # Debe ir ANTES del plan: el taint modifica el state, y si se ejecutara
+        # después el plan guardado quedaría stale y el apply fallaría.
+        run: |
+          terraform taint time_sleep.wait_for_site_validation || true
+          terraform taint volterra_tf_params_action.deploy || true
         env:
           TF_VAR_xc_api_p12_file:    "./api.p12"
           TF_VAR_xc_api_url:         ${{ secrets.XC_API_URL }}
@@ -319,13 +323,8 @@ jobs:
           TF_VAR_inside_subnet_ids:  ${{ steps.ce_az.outputs.inside_subnet_ids }}
           TF_VAR_ssh_key:            ${{ steps.ssh_key.outputs.public_key }}
 
-      - name: Forzar re-ejecucion del wait y deploy action
-        # time_sleep y volterra_tf_params_action pueden estar ya en el state TFC
-        # si este es un re-run. El taint fuerza que se destruyan y recreen,
-        # garantizando que el wait de 300s ocurra SIEMPRE antes del apply del CE.
-        run: |
-          terraform taint time_sleep.wait_for_site_validation || true
-          terraform taint volterra_tf_params_action.deploy || true
+      - name: Terraform Plan
+        run: terraform plan -input=false -out=tfplan
         env:
           TF_VAR_xc_api_p12_file:    "./api.p12"
           TF_VAR_xc_api_url:         ${{ secrets.XC_API_URL }}

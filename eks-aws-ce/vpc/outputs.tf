@@ -9,7 +9,7 @@ output "vpc_cidr" {
 }
 
 output "private_subnet_ids" {
-  description = "IDs de las subnets privadas (para nodos EKS y CE inside)"
+  description = "IDs de las subnets privadas para nodos EKS (con ruta NAT)"
   value       = aws_subnet.private[*].id
 }
 
@@ -18,9 +18,14 @@ output "private_subnet_cidrs" {
   value       = aws_subnet.private[*].cidr_block
 }
 
-output "outside_subnet_ids" {
-  description = "IDs de las subnets outside (para la interfaz exterior del CE)"
-  value       = aws_subnet.outside[*].id
+output "ce_inside_subnet_ids" {
+  description = "IDs del subnet CE inside (sin route table — F5 XC gestiona el routing)"
+  value       = [aws_subnet.ce_inside.id]
+}
+
+output "ce_outside_subnet_ids" {
+  description = "IDs del subnet CE outside (sin route table — F5 XC gestiona el routing + IGW)"
+  value       = [aws_subnet.ce_outside.id]
 }
 
 output "az_names" {

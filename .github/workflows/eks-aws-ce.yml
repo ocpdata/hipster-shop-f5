@@ -119,14 +119,16 @@ jobs:
           echo "vpc_id=$(terraform output -raw vpc_id)" >> $GITHUB_OUTPUT
           echo "private_subnet_ids=$(terraform output -json private_subnet_ids)" >> $GITHUB_OUTPUT
           echo "private_subnet_cidrs=$(terraform output -json private_subnet_cidrs)" >> $GITHUB_OUTPUT
-          echo "outside_subnet_ids=$(terraform output -json outside_subnet_ids)" >> $GITHUB_OUTPUT
+          echo "ce_inside_subnet_ids=$(terraform output -json ce_inside_subnet_ids)" >> $GITHUB_OUTPUT
+          echo "ce_outside_subnet_ids=$(terraform output -json ce_outside_subnet_ids)" >> $GITHUB_OUTPUT
           echo "az_names=$(terraform output -json az_names)" >> $GITHUB_OUTPUT
 
     outputs:
       vpc_id:               ${{ steps.vpc_output.outputs.vpc_id }}
       private_subnet_ids:   ${{ steps.vpc_output.outputs.private_subnet_ids }}
       private_subnet_cidrs: ${{ steps.vpc_output.outputs.private_subnet_cidrs }}
-      outside_subnet_ids:   ${{ steps.vpc_output.outputs.outside_subnet_ids }}
+      ce_inside_subnet_ids: ${{ steps.vpc_output.outputs.ce_inside_subnet_ids }}
+      ce_outside_subnet_ids: ${{ steps.vpc_output.outputs.ce_outside_subnet_ids }}
       az_names:             ${{ steps.vpc_output.outputs.az_names }}
 
   # ────────────────────────────────────────────────────────────────────────────
@@ -267,14 +269,10 @@ jobs:
       - name: Limitar CE a 1 AZ (F5 XC requiere 1 o 3 az_nodes, no 2)
         id: ce_az
         run: |
-          # Toma solo el primer elemento de cada lista — EKS puede usar 2+ AZs
-          # pero el CE de F5 XC solo acepta 1 o 3 az_nodes.
+          # Los subnets ce_inside y ce_outside ya son 1 elemento desde vpc/.
+          # Solo hace falta recortar az_names a 1 elemento.
           AZ='${{ needs.vpc-create.outputs.az_names }}'
-          OUT='${{ needs.vpc-create.outputs.outside_subnet_ids }}'
-          IN='${{ needs.vpc-create.outputs.private_subnet_ids }}'
           echo "az_names=$(echo "$AZ" | jq -c '[.[0]]')" >> $GITHUB_OUTPUT
-          echo "outside_subnet_ids=$(echo "$OUT" | jq -c '[.[0]]')" >> $GITHUB_OUTPUT
-          echo "inside_subnet_ids=$(echo "$IN" | jq -c '[.[0]]')" >> $GITHUB_OUTPUT
 
       - name: Create TFC workspace if not exists
         env:
@@ -338,8 +336,8 @@ jobs:
           TF_VAR_aws_secret_key:     ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           TF_VAR_vpc_id:             ${{ needs.vpc-create.outputs.vpc_id }}
           TF_VAR_az_names:           ${{ steps.ce_az.outputs.az_names }}
-          TF_VAR_outside_subnet_ids: ${{ steps.ce_az.outputs.outside_subnet_ids }}
-          TF_VAR_inside_subnet_ids:  ${{ steps.ce_az.outputs.inside_subnet_ids }}
+          TF_VAR_outside_subnet_ids: ${{ needs.vpc-create.outputs.ce_outside_subnet_ids }}
+          TF_VAR_inside_subnet_ids:  ${{ needs.vpc-create.outputs.ce_inside_subnet_ids }}
           TF_VAR_ssh_key:            ${{ steps.ssh_key.outputs.public_key }}
 
       - name: Terraform Apply

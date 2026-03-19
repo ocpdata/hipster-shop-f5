@@ -193,13 +193,14 @@ jobs:
 
       - name: Terraform Destroy
         if: steps.check_ws.outputs.ws_exists == 'true'
-        # Placeholders para list(string): JSON válido requerido por el tipo de variable
+        # Durante destroy, Terraform usa el state — los placeholders solo satisfacen
+        # la validación de tipo. CIDRs deben ser válidos para pasar la validación de AWS.
         run: terraform destroy -input=false -auto-approve
         env:
           TF_VAR_aws_region:            ${{ vars.AWS_REGION }}
-          TF_VAR_vpc_id:                "placeholder"
-          TF_VAR_private_subnet_ids:    '["placeholder"]'
-          TF_VAR_private_subnet_cidrs:  '["placeholder"]'
+          TF_VAR_vpc_id:                "vpc-00000000000000000"
+          TF_VAR_private_subnet_ids:    '["subnet-00000000000000000"]'
+          TF_VAR_private_subnet_cidrs:  '["10.0.0.0/8"]'
 
   # ────────────────────────────────────────────────────────────────────────────
   # Stage 2b — Destruir Customer Edge F5 XC (paralelo con 2a)

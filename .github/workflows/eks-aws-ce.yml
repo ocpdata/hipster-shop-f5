@@ -319,6 +319,26 @@ jobs:
           TF_VAR_inside_subnet_ids:  ${{ steps.ce_az.outputs.inside_subnet_ids }}
           TF_VAR_ssh_key:            ${{ steps.ssh_key.outputs.public_key }}
 
+      - name: Forzar re-ejecucion del wait y deploy action
+        # time_sleep y volterra_tf_params_action pueden estar ya en el state TFC
+        # si este es un re-run. El taint fuerza que se destruyan y recreen,
+        # garantizando que el wait de 300s ocurra SIEMPRE antes del apply del CE.
+        run: |
+          terraform taint time_sleep.wait_for_site_validation || true
+          terraform taint volterra_tf_params_action.deploy || true
+        env:
+          TF_VAR_xc_api_p12_file:    "./api.p12"
+          TF_VAR_xc_api_url:         ${{ secrets.XC_API_URL }}
+          TF_VAR_f5xc_tenant:        ${{ secrets.XC_TENANT }}
+          TF_VAR_aws_region:         ${{ vars.AWS_REGION }}
+          TF_VAR_aws_access_key:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_key:     ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TF_VAR_vpc_id:             ${{ needs.vpc-create.outputs.vpc_id }}
+          TF_VAR_az_names:           ${{ steps.ce_az.outputs.az_names }}
+          TF_VAR_outside_subnet_ids: ${{ steps.ce_az.outputs.outside_subnet_ids }}
+          TF_VAR_inside_subnet_ids:  ${{ steps.ce_az.outputs.inside_subnet_ids }}
+          TF_VAR_ssh_key:            ${{ steps.ssh_key.outputs.public_key }}
+
       - name: Terraform Apply
         # El apply del CE puede tardar varios minutos (volterra_tf_params_action)
         run: terraform apply -input=false -auto-approve tfplan

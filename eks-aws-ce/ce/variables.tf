@@ -88,6 +88,12 @@ variable "ssh_key" {
   sensitive   = true
 }
 
+variable "site_validation_wait" {
+  description = "Tiempo de espera tras crear el AWS VPC Site para que F5 XC complete la validación interna antes del apply. Aumentar si el apply falla con 'config validation did not succeed'."
+  type        = string
+  default     = "300s"
+}
+
 # ─── Labels ───────────────────────────────────────────────────────────────────
 variable "labels" {
   description = "Labels aplicados al site en F5 XC"

@@ -79,7 +79,7 @@ resource "volterra_aws_vpc_site" "ce" {
 # 3. Waiting — da tiempo a F5 XC para validar el site antes de hacer apply
 # ─────────────────────────────────────────────────────────────────────────────
 resource "time_sleep" "wait_for_site_validation" {
-  create_duration = "120s"
+  create_duration = var.site_validation_wait
   depends_on      = [volterra_aws_vpc_site.ce]
 }
 

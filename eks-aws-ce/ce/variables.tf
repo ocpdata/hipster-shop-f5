@@ -55,18 +55,23 @@ variable "vpc_id" {
 }
 
 variable "az_names" {
-  description = "Lista de AZs donde se instalarán los nodos CE (output az_names del stack vpc/)"
+  description = "Lista de AZs donde se instalarán los nodos CE. F5 XC acepta exactamente 1 o 3 AZs."
   type        = list(string)
   default     = ["us-east-1a"]
+
+  validation {
+    condition     = length(var.az_names) == 1 || length(var.az_names) == 3
+    error_message = "F5 XC solo acepta 1 o 3 az_nodes para ingress_egress_gw. Recibido: ${length(var.az_names)}."
+  }
 }
 
 variable "outside_subnet_ids" {
-  description = "IDs de las subnets outside para la interfaz exterior del CE (output outside_subnet_ids del stack vpc/)"
+  description = "IDs de las subnets outside para la interfaz exterior del CE. Debe tener el mismo número de elementos que az_names (1 o 3)."
   type        = list(string)
 }
 
 variable "inside_subnet_ids" {
-  description = "IDs de las subnets inside del CE — mismas subnets privadas que los nodos EKS (output private_subnet_ids del stack vpc/)"
+  description = "IDs de las subnets inside del CE — mismas subnets privadas que los nodos EKS. Debe tener el mismo número de elementos que az_names (1 o 3)."
   type        = list(string)
 }
 
